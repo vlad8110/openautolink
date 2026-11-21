@@ -8,5 +8,5 @@ internal object UsbDevicePolicy {
     )
 
     fun isKnownNonPhoneDevice(vendorId: Int, productId: Int): Boolean =
-        vendorId to productId in knownNonPhoneDevices
+        vendorId to productId in knownNonPhoneDevices || vendorId == UsbConstants.CARLINKIT_VID
 }

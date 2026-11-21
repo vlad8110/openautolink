@@ -9,6 +9,7 @@ import android.hardware.usb.UsbDevice
 internal object UsbAttachAuthorization {
     fun matches(device: UsbDevice): Boolean {
         if (UsbConstants.isAccessoryDevice(device.vendorId, device.productId)) return true
+        if (device.vendorId == UsbConstants.CARLINKIT_VID) return device.productId == 0x1520 || device.productId == 0x1521
         if (device.vendorId != 0x05ac) return false
         fun mux(cls: Int, sub: Int, proto: Int) = cls == 255 && sub == 254 && proto == 2
         if (mux(device.deviceClass, device.deviceSubclass, device.deviceProtocol)) return true

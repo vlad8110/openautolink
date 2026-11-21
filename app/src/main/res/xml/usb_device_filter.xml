@@ -7,4 +7,7 @@
          DeviceFilter checks device OR interface class/subclass/protocol.
          Keep UsbAttachAuthorization.matches synchronized with these filters. -->
     <usb-device vendor-id="1452" class="255" subclass="254" protocol="2" />
+    <!-- Carlinkit CPC200-CCPA CarPlay adapter (0x1314:0x1520 / 0x1521). -->
+    <usb-device vendor-id="4884" product-id="5408" />
+    <usb-device vendor-id="4884" product-id="5409" />
 </resources>

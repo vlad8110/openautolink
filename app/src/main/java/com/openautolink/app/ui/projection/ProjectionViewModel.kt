@@ -110,6 +110,9 @@ class ProjectionViewModel(application: Application) : AndroidViewModel(applicati
     private val _carPlayDisplay = MutableStateFlow(com.openautolink.carplaylab.media.CarPlayDisplayPreferences())
     val carPlayDisplay = _carPlayDisplay.asStateFlow()
     @Volatile private var usbCarPlayRuntime: com.openautolink.app.carplay.OalUsbCarPlayRuntime? = null
+    @Volatile private var dongleCarPlayRuntime: com.openautolink.app.carplay.DongleCarPlayRuntime? = null
+    @Volatile private var carlinkitAdapter: com.openautolink.app.carplay.CarlinkitAdapter? = null
+    @Volatile private var carlinkitOwnsScreen = false
     private var unifiedUsbManager: com.openautolink.app.transport.usb.UsbConnectionManager? = null
     private val usbConsent = com.openautolink.app.carplay.UsbHotPlugConsent()
     private val usbHandoff = com.openautolink.app.carplay.UsbProjectionHandoff { stage ->
@@ -158,6 +161,54 @@ class ProjectionViewModel(application: Application) : AndroidViewModel(applicati
                 carPlayCoordinator.refreshTelemetry()
             }
         }
+    }
+
+    // Carlinkit CarPlay adapter: runs in the background while plugged in and takes the screen only
+    // once an iPhone connects to it; when the iPhone leaves, the screen goes back to Android Auto.
+    private val carlinkitReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            @Suppress("DEPRECATION")
+            val device = intent.getParcelableExtra<android.hardware.usb.UsbDevice>(android.hardware.usb.UsbManager.EXTRA_DEVICE)
+            if (!com.openautolink.app.carplay.CarlinkitAdapter.isAdapter(device)) return
+            if (intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) attachCarlinkitAdapter(device!!)
+            else if (intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED) {
+                val adapter = carlinkitAdapter ?: return
+                if (adapter.deviceName == device!!.deviceName) { carlinkitAdapter = null; adapter.close() }
+            }
+        }
+    }
+
+    init {
+        val app = getApplication<Application>()
+        app.registerReceiver(carlinkitReceiver, android.content.IntentFilter().apply {
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }, android.content.Context.RECEIVER_NOT_EXPORTED)
+        app.getSystemService(android.hardware.usb.UsbManager::class.java)?.deviceList?.values
+            ?.firstOrNull(com.openautolink.app.carplay.CarlinkitAdapter::isAdapter)?.let(::attachCarlinkitAdapter)
+    }
+
+    @Synchronized private fun attachCarlinkitAdapter(device: android.hardware.usb.UsbDevice) {
+        if (carlinkitAdapter?.deviceName == device.deviceName) return
+        carlinkitAdapter?.close()
+        lateinit var adapter: com.openautolink.app.carplay.CarlinkitAdapter
+        adapter = com.openautolink.app.carplay.CarlinkitAdapter(getApplication(), device) { connected ->
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                if (connected) {
+                    if (com.openautolink.app.input.IgnitionMonitor.isOffOrLocked() || _carPlayState.value.selected) return@launch
+                    if (carPlayCoordinator.connectWithContext(true) { attemptContext, report ->
+                        com.openautolink.app.carplay.DongleCarPlayRuntime(adapter, report, attemptContext)
+                            .also { dongleCarPlayRuntime = it }
+                    }) carlinkitOwnsScreen = true
+                } else if (carlinkitOwnsScreen) {
+                    carlinkitOwnsScreen = false
+                    dongleCarPlayRuntime = null
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { returnToAndroidAuto() }
+                }
+            }
+        }
+        carlinkitAdapter = adapter
+        adapter.start()
     }
 
     private val projectionLaunchPolicy = ProjectionLaunchPolicy()
@@ -889,6 +940,7 @@ class ProjectionViewModel(application: Application) : AndroidViewModel(applicati
         }
         carPlayRuntime?.touch(event.actionMasked, event.actionIndex, pointers, width, height)
         usbCarPlayRuntime?.touch(event.actionMasked, event.actionIndex, pointers, width, height)
+        dongleCarPlayRuntime?.touch(event.actionMasked, event.actionIndex, pointers, width, height)
     }
     @Volatile private var selectedNetworkInterfaceName: String = ""
     @Volatile private var lastTransportNetworkEventAt: Long = 0L
@@ -2111,6 +2163,9 @@ class ProjectionViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     override fun onCleared() {
+        runCatching { getApplication<Application>().unregisterReceiver(carlinkitReceiver) }
+        carlinkitAdapter?.close()
+        carlinkitAdapter = null
         usbDispatchEpoch.incrementAndGet()
         unifiedUsbManager?.stop()
         unifiedUsbManager = null

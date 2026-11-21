@@ -43,3 +43,12 @@
 # Conscrypt SSL provider — suppress warnings for optional platform classes
 -dontwarn com.android.org.conscrypt.SSLParametersImpl
 -dontwarn org.apache.harmony.xnet.provider.jsse.SSLParametersImpl
+
+# Carlinkit adapter protocol (lifted from lvalen91/carlink): enums are looked up by wire id.
+-keepclassmembers class com.carlink.protocol.CommandMapping { <fields>; }
+-keepclassmembers class com.carlink.protocol.MessageType { <fields>; }
+-keepclassmembers class com.carlink.protocol.AudioCommand { <fields>; }
+-keepclassmembers class com.carlink.protocol.PhoneType { <fields>; }
+-keepclassmembers class com.carlink.protocol.MediaType { <fields>; }
+-keepclassmembers class com.carlink.protocol.MultiTouchAction { <fields>; }
+-keepclassmembers class com.carlink.protocol.FileAddress { <fields>; }

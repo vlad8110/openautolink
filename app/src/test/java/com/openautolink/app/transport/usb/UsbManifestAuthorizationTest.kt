@@ -14,7 +14,10 @@ class UsbManifestAuthorizationTest {
             it.getAttribute("vendor-id") == "1452" && it.getAttribute("class") == "255" &&
                 it.getAttribute("subclass") == "254" && it.getAttribute("protocol") == "2"
         })
-        assertEquals("Only AOA and Apple USBMUX are allowed", 3, filters.size)
+        val carlinkit = filters.filter { it.getAttribute("vendor-id") == "4884" }
+        assertEquals("Carlinkit adapter: exactly its two PIDs", setOf("5408", "5409"),
+            carlinkit.map { it.getAttribute("product-id") }.toSet())
+        assertEquals("Only AOA, Apple USBMUX and the Carlinkit adapter are allowed", 5, filters.size)
         assertTrue(filters.all { it.hasAttribute("vendor-id") })
     }
 }

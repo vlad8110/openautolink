@@ -40,6 +40,9 @@ object UsbConstants {
     const val USB_DIR_OUT = 0x00    // host → device
     const val USB_TYPE_VENDOR = 0x40
 
+    /** Carlinkit CarPlay adapter. Owned by CarlinkitAdapter, never a phone or AOA candidate. */
+    const val CARLINKIT_VID = 0x1314
+
     /** Check if a USB device is already in Google Accessory mode. */
     fun isAccessoryDevice(vendorId: Int, productId: Int): Boolean {
         return vendorId == GOOGLE_VID && (productId == ACC_PID || productId == ACC_ADB_PID)
