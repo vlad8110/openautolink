@@ -374,17 +374,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         // Multi-phone: default phone to auto-connect to
         val DEFAULT_PHONE_NAME = stringPreferencesKey("default_phone_name")
 
-        // Multi-phone (Car Hotspot mode):
-        // - CONNECTION_MODE: "phone_hotspot" (default, current single-phone flow)
-        //                    or "car_hotspot" (multi-phone over car AP).
-        // - DEFAULT_PHONE_ID: stable phone_id (UUID published by companion in
-        //   mDNS TXT) the car prefers when multiple phones are reachable.
-        // - ALWAYS_ASK_PHONE: when true, the car never auto-connects to the
-        //   default phone; the chooser is shown on every connect. (Behavior 2.)
-        val CONNECTION_MODE = stringPreferencesKey("connection_mode")
-        val DEFAULT_PHONE_ID = stringPreferencesKey("default_phone_id")
-        val ALWAYS_ASK_PHONE = booleanPreferencesKey("always_ask_phone")
-
         // EV energy model tuning — see docs/ev-energy-model-tuning-plan.md.
         // EV_TUNING_ENABLED is the master toggle; when false, all overrides
         // are ignored and we send today's hardcoded VEM values.
@@ -520,14 +509,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         const val DEFAULT_VOLUME_OFFSET_NAVIGATION = 0
         const val DEFAULT_VOLUME_OFFSET_ASSISTANT = 0
         const val DEFAULT_DEFAULT_PHONE_NAME = "" // empty = connect to first found
-
-        // Connection-mode constants. Kept as `const val` strings so call sites
-        // can `when (mode) { CONNECTION_MODE_PHONE_HOTSPOT -> ... }` cleanly.
-        const val CONNECTION_MODE_PHONE_HOTSPOT = "phone_hotspot"
-        const val CONNECTION_MODE_CAR_HOTSPOT = "car_hotspot"
-        const val DEFAULT_CONNECTION_MODE = CONNECTION_MODE_CAR_HOTSPOT
-        const val DEFAULT_DEFAULT_PHONE_ID = ""
-        const val DEFAULT_ALWAYS_ASK_PHONE = false
 
         // EV tuning defaults — must reproduce current hardcoded VEM behavior
         // when EV_TUNING_ENABLED=false (see sendEnergyModelSensor in
@@ -1183,20 +1164,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
 
     suspend fun setDefaultPhoneName(name: String) {
         dataStore.edit { it[DEFAULT_PHONE_NAME] = name }
-    }
-
-    // ── Multi-phone (Car Hotspot mode) ──────────────────────────────
-
-    val connectionMode: Flow<String> = dataStore.data.map { prefs ->
-        prefs[CONNECTION_MODE] ?: DEFAULT_CONNECTION_MODE
-    }
-
-    val defaultPhoneId: Flow<String> = dataStore.data.map { prefs ->
-        prefs[DEFAULT_PHONE_ID] ?: DEFAULT_DEFAULT_PHONE_ID
-    }
-
-    val alwaysAskPhone: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[ALWAYS_ASK_PHONE] ?: DEFAULT_ALWAYS_ASK_PHONE
     }
 
     // ── EV energy model tuning ──────────────────────────────────────

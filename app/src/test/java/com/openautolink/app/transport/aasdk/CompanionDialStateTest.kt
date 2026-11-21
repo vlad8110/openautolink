@@ -122,6 +122,18 @@ class CompanionDialStateTest {
         assertTrue(failure.contains("socket.close()"))
     }
 
+    @Test
+    fun idleProbeRunsWithoutLegacyPhoneChooserPrefs() {
+        val source = projectFile(
+            "app/src/main/java/com/openautolink/app/ui/projection/ProjectionViewModel.kt",
+        ).readText()
+        val loop = source.substringAfter("WPP periodic idle probe").substringBefore("udpBroadcastOnInterface")
+        assertTrue(loop.contains("DIRECT_TRANSPORT_WPP"))
+        for (gate in listOf("connectionMode", "alwaysAskPhone", "defaultPhoneId")) {
+            assertFalse(gate, loop.contains(gate))
+        }
+    }
+
     private fun projectFile(relativePath: String): File {
         val workingDir = File(checkNotNull(System.getProperty("user.dir")))
         return generateSequence(workingDir) { it.parentFile }

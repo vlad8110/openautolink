@@ -1597,20 +1597,17 @@ class ProjectionViewModel(application: Application) : AndroidViewModel(applicati
         }
         // WPP periodic idle probe: the sweep is how we learn the companion's address,
         // which the Bluetooth advertiser needs to ask for its AA proxy port. The
-        // sweep itself never dials. Gates are the legacy saved connection-mode,
-        // always-ask and default-phone preferences, unchanged from before.
+        // sweep itself never dials; the Bluetooth side proves which phone owns
+        // an address, so no default phone is needed.
         viewModelScope.launch {
             while (true) {
                 kotlinx.coroutines.delay(IDLE_SWEEP_INTERVAL_MS)
                 try {
                     if (preferences.effectiveDirectTransport.first() != AppPreferences.DIRECT_TRANSPORT_WPP) continue
-                    if (preferences.connectionMode.first() != AppPreferences.CONNECTION_MODE_CAR_HOTSPOT) continue
                     if (sessionManager.sessionState.value != SessionState.IDLE) continue
-                    if (preferences.alwaysAskPhone.first()) continue
-                    if (preferences.defaultPhoneId.first().isBlank()) continue
                     if (connectInFlight) continue
                     if (phoneDiscovery.isSweeping.value) continue
-                    OalLog.d(TAG, "Periodic idle probe (WPP, default set, no session)")
+                    OalLog.d(TAG, "Periodic idle probe (WPP, no session)")
                     // Cheap-first: a single UDP broadcast costs ~1 packet
                     // and ~600ms wall time. Only escalate to the full /24
                     // sweep if broadcast comes back empty.
