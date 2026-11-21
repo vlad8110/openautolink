@@ -3,7 +3,6 @@ package com.openautolink.companion.connection
 import com.openautolink.companion.diagnostics.CompanionLog
 import com.openautolink.companion.diagnostics.PhoneWppDiagnostics
 import com.openautolink.companion.diagnostics.PhoneWppStage
-import com.openautolink.companion.service.TcpAdvertiser
 import kotlinx.coroutines.*
 import java.io.InputStream
 import java.io.OutputStream

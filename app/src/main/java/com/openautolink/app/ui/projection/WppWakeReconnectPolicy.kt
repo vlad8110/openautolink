@@ -1,13 +1,7 @@
 package com.openautolink.app.ui.projection
 
-/** Pure admission policy for rebuilding an idle projection session after wake. */
+/** Pure admission policy for rebuilding an idle WPP projection session after wake. */
 internal object WppWakeReconnectPolicy {
-    fun cooldownAllows(
-        wppSelected: Boolean,
-        elapsedSinceAttemptMs: Long,
-        minimumGapMs: Long,
-    ): Boolean = wppSelected || elapsedSinceAttemptMs >= minimumGapMs
-
     fun preStartRejection(
         wppSelectedNow: Boolean,
         ignitionOff: Boolean,
@@ -23,35 +17,15 @@ internal object WppWakeReconnectPolicy {
 
     fun shouldKickWake(
         wppSelected: Boolean,
-        wirelessDiscoveryEnabled: Boolean,
-        alwaysAskPhone: Boolean,
-        defaultPhonePresent: Boolean,
-        resolvedPhonePresent: Boolean,
         connectInFlight: Boolean,
         sessionIdle: Boolean,
         currentWppOwnerPresent: Boolean = false,
-    ): Boolean {
-        if (connectInFlight || !sessionIdle) return false
-        if (wppSelected) return !currentWppOwnerPresent
-        return wirelessDiscoveryEnabled &&
-            !alwaysAskPhone &&
-            defaultPhonePresent &&
-            resolvedPhonePresent
-    }
+    ): Boolean = wppSelected && !connectInFlight && sessionIdle && !currentWppOwnerPresent
 
     fun shouldKickIgnition(
         wppSelected: Boolean,
-        wirelessDiscoveryEnabled: Boolean,
-        alwaysAskPhone: Boolean,
-        defaultPhonePresent: Boolean,
         connectInFlight: Boolean,
         sessionIdle: Boolean,
         currentWppOwnerPresent: Boolean = false,
-    ): Boolean {
-        if (connectInFlight || !sessionIdle) return false
-        if (wppSelected) return !currentWppOwnerPresent
-        return wirelessDiscoveryEnabled &&
-            !alwaysAskPhone &&
-            defaultPhonePresent
-    }
+    ): Boolean = shouldKickWake(wppSelected, connectInFlight, sessionIdle, currentWppOwnerPresent)
 }

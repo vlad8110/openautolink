@@ -26,9 +26,7 @@ internal fun fitLocalDiagnosticMessage(message: String): String =
 /**
  * Global diagnostic logger — subsystems call this to emit diagnostic log events.
  *
- * This is a thin facade over [RemoteDiagnostics] that allows any subsystem
- * to log without holding a direct reference to the diagnostics instance.
- * The session manager sets the active instance; when null, calls are no-ops.
+ * Any subsystem can log here without holding a reference to a logger.
  *
  * Local buffering is **always on** — entries are kept in a fixed-capacity
  * ring buffer (500 entries, ~500 KB worst case) and snapshotted to a
@@ -74,11 +72,7 @@ object DiagnosticLog {
         }
         if (diagLevel == DiagnosticLevel.DEBUG && !verbose) return
         addLocal(diagLevel, tag, msg)
-        instance?.log(diagLevel, tag, msg)
     }
-
-    @Volatile
-    var instance: RemoteDiagnostics? = null
 
     /** File log writer for USB stick logging. Set by ProjectionViewModel. */
     @Volatile
@@ -97,22 +91,18 @@ object DiagnosticLog {
     fun d(tag: String, msg: String) {
         if (!verbose) return
         addLocal(DiagnosticLevel.DEBUG, tag, msg)
-        instance?.log(DiagnosticLevel.DEBUG, tag, msg)
     }
 
     fun i(tag: String, msg: String) {
         addLocal(DiagnosticLevel.INFO, tag, msg)
-        instance?.log(DiagnosticLevel.INFO, tag, msg)
     }
 
     fun w(tag: String, msg: String) {
         addLocal(DiagnosticLevel.WARN, tag, msg)
-        instance?.log(DiagnosticLevel.WARN, tag, msg)
     }
 
     fun e(tag: String, msg: String) {
         addLocal(DiagnosticLevel.ERROR, tag, msg)
-        instance?.log(DiagnosticLevel.ERROR, tag, msg)
     }
 
     fun clearLocal() {

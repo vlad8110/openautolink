@@ -16,10 +16,9 @@ import java.net.Inet4Address
  * Observes Wi-Fi networks for the service lifetime and selects the network that
  * should own the car-facing listeners.
  *
- * This observer is passive: Gearhead or CarWifiManager owns association. The
- * exact CarWifiManager network may be supplied through [prefer]. Otherwise a
- * local-only WifiNetworkSpecifier network observed during an active WPP startup
- * attempt is retained as the WPP candidate; unrelated Wi-Fi is ignored.
+ * This observer is passive: Gearhead owns association. A local-only
+ * WifiNetworkSpecifier network observed during an active WPP startup attempt is
+ * retained as the WPP candidate; unrelated Wi-Fi is ignored.
  */
 class CarNetworkMonitor(
     context: Context,
@@ -69,14 +68,6 @@ class CarNetworkMonitor(
         } catch (e: Exception) {
             CompanionLog.w(TAG, "Car-network binding observer unavailable: ${e.message}")
         }
-    }
-
-    @Synchronized
-    fun prefer(network: Network?) {
-        if (!started) return
-        if (network != null) refresh(network)
-        selector.prefer(network)
-        publishIfChanged()
     }
 
     @Synchronized

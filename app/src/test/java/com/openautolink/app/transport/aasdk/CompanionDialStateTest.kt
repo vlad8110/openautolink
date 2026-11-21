@@ -86,6 +86,42 @@ class CompanionDialStateTest {
         assertTrue(afterConnect.contains("socket.close()"))
     }
 
+    @Test
+    fun replacedSessionCannotCloseTheNewPipe() {
+        val source = projectFile(
+            "app/src/main/java/com/openautolink/app/transport/aasdk/AasdkSession.kt",
+        ).readText()
+        // nativeCreateSession() stops the old session, whose onSessionStopped()
+        // closes transportPipe; the new pipe must be published only after that.
+        for (body in listOf(
+            source.substringAfter("private fun handleConnection").substringBefore("fun shutdownGracefully"),
+            source.substringAfter("private fun handleUsbConnection").substringBefore("private fun retireDetachedUsbTransport"),
+        )) {
+            val create = body.indexOf("AasdkNative.nativeCreateSession()")
+            val publish = body.indexOf("transportPipe = pipe")
+            assertTrue(create >= 0 && publish > create)
+        }
+    }
+
+    @Test
+    fun wppListenerReleasesItsSessionLatch() {
+        val source = projectFile(
+            "app/src/main/java/com/openautolink/app/transport/aasdk/AasdkSession.kt",
+        ).readText()
+        assertTrue(source.contains("transportPipe = null\n        _wppServer?.onSessionEnded()"))
+        val connect = source.substringAfter("private fun handleConnection").substringBefore("fun shutdownGracefully")
+        assertTrue(Regex("""_wppServer\?\.onSessionEnded\(\)""").findAll(connect).count() >= 3)
+    }
+
+    @Test
+    fun failedDialClosesItsSocket() {
+        val source = projectFile(
+            "app/src/main/java/com/openautolink/app/transport/hotspot/TcpConnector.kt",
+        ).readText()
+        val failure = source.substringAfter("failed: ${'$'}{e.message}\")").substringBefore("false")
+        assertTrue(failure.contains("socket.close()"))
+    }
+
     private fun projectFile(relativePath: String): File {
         val workingDir = File(checkNotNull(System.getProperty("user.dir")))
         return generateSequence(workingDir) { it.parentFile }

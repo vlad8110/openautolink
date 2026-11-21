@@ -203,10 +203,10 @@ class CompanionIdentityPolicyTest {
         assertFalse(session.contains("identityValidatedCompanionIp()"))
         assertFalse(session.contains("AaWirelessBtControl.lastKnownPhoneIp"))
         assertFalse(session.contains(".lastKnownPhoneIp"))
-        assertEquals(1, session.windowed("\"wpp\" -> startWpp()".length)
-            .count { it == "\"wpp\" -> startWpp()" })
-        assertEquals(2, session.windowed("\"wpp\" -> startWpp(recovery = true)".length)
-            .count { it == "\"wpp\" -> startWpp(recovery = true)" })
+        assertEquals(1, session.windowed("else -> startWpp()".length)
+            .count { it == "else -> startWpp()" })
+        assertEquals(2, session.windowed("else -> startWpp(recovery = true)".length)
+            .count { it == "else -> startWpp(recovery = true)" })
         // Resolution now reserves loopback without probing. The asynchronous
         // completion is the identity-checked cache/dial transaction; global
         // textual ordering relative to the matcher declaration is not its order.

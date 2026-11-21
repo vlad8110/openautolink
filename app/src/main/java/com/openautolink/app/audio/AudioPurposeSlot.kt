@@ -32,7 +32,6 @@ class AudioPurposeSlot(
     }
 
     private var audioTrack: AudioTrack? = null
-    private var aacDecoder: AacDecoder? = null
     private val lifecycleLock = Any()
 
     /** One bounded, generation-owned writer per active interval. */
@@ -242,9 +241,6 @@ class AudioPurposeSlot(
     }
 
     private fun retireDrain(reason: String) {
-        val retiredDecoder = aacDecoder
-        aacDecoder = null
-        retiredDecoder?.stop()
         val retired = drain
         drain = null
         val result = if (retired != null) {
@@ -261,7 +257,7 @@ class AudioPurposeSlot(
             "generation=${result?.generation ?: -1} " +
             "droppedQueuedChunks=${result?.droppedChunks ?: 0} " +
             "droppedQueuedBytes=${result?.droppedBytes ?: 0} " +
-            "aacRetired=${retiredDecoder != null} flushed=true"
+            "flushed=true"
         Log.i(TAG, message)
         DiagnosticLog.i("audio", message)
     }
@@ -270,34 +266,10 @@ class AudioPurposeSlot(
         audioTrack?.setVolume(volume.coerceIn(0f, 1f))
     }
 
-    /**
-     * Feed an AAC-LC encoded frame. Creates an AacDecoder on first call
-     * which decodes to PCM and routes through feedPcm().
-     */
-    fun feedAac(data: ByteArray) {
-        if (!active.get()) return
-        val existing = aacDecoder
-        val decoder = if (existing != null) {
-            existing
-        } else {
-            lateinit var decoder: AacDecoder
-            decoder = AacDecoder(sampleRate, channelCount) { pcm ->
-                if (aacDecoder === decoder && active.get()) feedPcm(pcm)
-            }
-            aacDecoder = decoder
-            decoder.start()
-            Log.i(TAG, "$purpose: AAC decoder started (${sampleRate}Hz ${channelCount}ch)")
-            decoder
-        }
-        decoder.queueAacFrame(data)
-    }
-
     fun release() {
         synchronized(lifecycleLock) {
             if (released.getAndSet(true)) return@synchronized
             stop()
-            aacDecoder?.stop()
-            aacDecoder = null
             drain = null
             audioTrack?.release()
             audioTrack = null
@@ -308,8 +280,6 @@ class AudioPurposeSlot(
     val isActive: Boolean get() = active.get()
     val pendingAudioBytes: Int get() = drain?.pendingBytes ?: 0
     val staleAudioBytesDropped: Long get() = staleBytesDropped.get()
-    val ringBufferAvailable: Int get() = 0
-    val ringBufferCapacity: Int get() = 0
 
     /**
      * How long this slot has been idle (no frames received) in ms.

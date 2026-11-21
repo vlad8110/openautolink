@@ -35,6 +35,19 @@ class CompanionIdentityPayloadTest {
     }
 
     @Test
+    fun `identity payload omits wpp field when no proxy is live`() {
+        assertEquals(
+            "OAL!19bbbce4-1234\tOnePlus 13\tbt_name=\n",
+            CompanionIdentityPayload.encode(
+                phoneId = "19bbbce4-1234",
+                friendlyName = "OnePlus 13",
+                bluetoothName = null,
+                proxyPort = 0,
+            ),
+        )
+    }
+
+    @Test
     fun `tcp identity probe publishes the local bluetooth adapter name`() {
         val source = projectFile(
             "companion/src/main/java/com/openautolink/companion/service/TcpAdvertiser.kt",

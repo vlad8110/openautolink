@@ -35,7 +35,7 @@ import kotlinx.coroutines.sync.withLock
  * # start advertising + set the details handed to the phone
  * adb shell am broadcast -a com.openautolink.app.DEBUG_AAW_BT \
  *   --es ssid Fortress --es psk '<key>' --es bssid aa:bb:cc:dd:ee:ff \
- *   --es ip 192.168.1.100 --ei port 5277
+ *   --es ip 192.168.1.100
  *
  * # stop
  * adb shell am broadcast -a com.openautolink.app.DEBUG_AAW_BT_STOP
@@ -56,7 +56,7 @@ object AaWirelessBtControl {
     private const val ACTION_SET_TRANSPORT = "com.openautolink.app.DEBUG_SET_TRANSPORT"
 
     /** Companion's identity-probe port; it reports its AA proxy port here. */
-    private const val IDENTITY_PORT = 5278
+    private const val IDENTITY_PORT = com.openautolink.app.transport.OalProtocol.IDENTITY_PORT
 
     /**
      * How long a phone's session claim blocks other phones.
@@ -998,7 +998,6 @@ object AaWirelessBtControl {
         }
     }
 
-    /** Release the session claim so another phone can take it. */
     /**
      * Release the session claim as soon as the holding phone leaves Bluetooth.
      *
@@ -1246,7 +1245,8 @@ object AaWirelessBtControl {
                 ?: prefs.hotspotPassword.first()
             val bssid = intent?.getStringExtra("bssid")?.takeIf { it.isNotBlank() }
                 ?: prefs.wppBssid.first()
-            val port = intent?.getIntExtra("port", 5277) ?: 5277
+            // WppTcpServer always binds AA_PORT; advertising any other port reaches nobody.
+            val port = com.openautolink.app.transport.OalProtocol.AA_PORT
             val requestedIp = intent?.getStringExtra("ip")?.takeIf { it.isNotBlank() }
             if (requestedIp != null && requestedIp != interfaceIpv4) {
                 OalLog.w(TAG, "Ignoring WPP IP override $requestedIp — selected interface " +

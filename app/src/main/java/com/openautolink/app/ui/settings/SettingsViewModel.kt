@@ -62,10 +62,6 @@ data class SettingsUiState(
     val driveSide: String = AppPreferences.DEFAULT_DRIVE_SIDE,
     val gpsForwarding: Boolean = AppPreferences.DEFAULT_GPS_FORWARDING,
     val alwaysInPark: Boolean = AppPreferences.DEFAULT_ALWAYS_IN_PARK,
-    val clusterNavigation: Boolean = AppPreferences.DEFAULT_CLUSTER_NAVIGATION,
-    val overlayStatsButton: Boolean = AppPreferences.DEFAULT_OVERLAY_STATS_BUTTON,
-    val overlayPhoneSwitchButton: Boolean = AppPreferences.DEFAULT_OVERLAY_PHONE_SWITCH_BUTTON,
-    val overlayReconnectButton: Boolean = AppPreferences.DEFAULT_OVERLAY_RECONNECT_BUTTON,
     val fileLoggingEnabled: Boolean = AppPreferences.DEFAULT_FILE_LOGGING_ENABLED,
     val fileLoggingAutoStartUsb: Boolean = AppPreferences.DEFAULT_FILE_LOGGING_AUTOSTART_USB,
     val logcatCaptureEnabled: Boolean = AppPreferences.DEFAULT_LOGCAT_CAPTURE_ENABLED,
@@ -78,7 +74,6 @@ data class SettingsUiState(
     val logUploadDeviceLabel: String = AppPreferences.DEFAULT_LOG_UPLOAD_DEVICE_LABEL,
     val evContributionConsent: Boolean = AppPreferences.DEFAULT_EV_CONTRIBUTION_CONSENT,
     // UI customization
-    val syncAaTheme: Boolean = AppPreferences.DEFAULT_SYNC_AA_THEME,
     val hideAaClock: Boolean = AppPreferences.DEFAULT_HIDE_AA_CLOCK,
     val hidePhoneSignal: Boolean = AppPreferences.DEFAULT_HIDE_PHONE_SIGNAL,
     val hideBatteryLevel: Boolean = AppPreferences.DEFAULT_HIDE_BATTERY_LEVEL,
@@ -95,11 +90,6 @@ data class SettingsUiState(
     val volumeOffsetMedia: Int = AppPreferences.DEFAULT_VOLUME_OFFSET_MEDIA,
     val volumeOffsetNavigation: Int = AppPreferences.DEFAULT_VOLUME_OFFSET_NAVIGATION,
     val volumeOffsetAssistant: Int = AppPreferences.DEFAULT_VOLUME_OFFSET_ASSISTANT,
-    // Multi-phone
-    val defaultPhoneName: String = AppPreferences.DEFAULT_DEFAULT_PHONE_NAME,
-    // Manual IP (emulator testing)
-    val manualIpEnabled: Boolean = AppPreferences.DEFAULT_MANUAL_IP_ENABLED,
-    val manualIpAddress: String = AppPreferences.DEFAULT_MANUAL_IP_ADDRESS,
 )
 
 /** Next-session intent only. No preference write, host launch or reconnect during editing. */
@@ -595,12 +585,9 @@ class SettingsViewModel @JvmOverloads constructor(
         preferences.aaDecoderAdditionalDepth,
         preferences.driveSide,
         preferences.gpsForwarding,
-        preferences.clusterNavigation,
-        preferences.overlayStatsButton,
         preferences.fileLoggingEnabled,
         preferences.fileLoggingAutoStartUsb,
         preferences.logcatCaptureEnabled,
-        preferences.syncAaTheme,
         preferences.hideAaClock,
         preferences.hidePhoneSignal,
         preferences.hideBatteryLevel,
@@ -614,9 +601,6 @@ class SettingsViewModel @JvmOverloads constructor(
         preferences.volumeOffsetMedia,
         preferences.volumeOffsetNavigation,
         preferences.volumeOffsetAssistant,
-        preferences.defaultPhoneName,
-        preferences.manualIpEnabled,
-        preferences.manualIpAddress,
         preferences.btMacOverride,
         preferences.logUploadEnabled,
         preferences.logUploadUrl,
@@ -625,8 +609,6 @@ class SettingsViewModel @JvmOverloads constructor(
         preferences.logPersistEnabled,
         preferences.alwaysInPark,
         preferences.simulateIgnitionButton,
-        preferences.overlayPhoneSwitchButton,
-        preferences.overlayReconnectButton,
         preferences.evContributionConsent,
         preferences.oalUiScalePercent,
     ) { values: Array<Any> ->
@@ -649,40 +631,32 @@ class SettingsViewModel @JvmOverloads constructor(
             aaDecoderAdditionalDepth = values[15] as Int,
             driveSide = values[16] as String,
             gpsForwarding = values[17] as Boolean,
-            clusterNavigation = values[18] as Boolean,
-            overlayStatsButton = values[19] as Boolean,
-            fileLoggingEnabled = values[20] as Boolean,
-            fileLoggingAutoStartUsb = values[21] as Boolean,
-            logcatCaptureEnabled = values[22] as Boolean,
-            syncAaTheme = values[23] as Boolean,
-            hideAaClock = values[24] as Boolean,
-            hidePhoneSignal = values[25] as Boolean,
-            hideBatteryLevel = values[26] as Boolean,
-            sendImuSensors = values[27] as Boolean,
-            distanceUnits = values[28] as String,
-            safeAreaTop = values[29] as Int,
-            safeAreaBottom = values[30] as Int,
-            safeAreaLeft = values[31] as Int,
-            safeAreaRight = values[32] as Int,
-            keyRemap = values[33] as String,
-            volumeOffsetMedia = values[34] as Int,
-            volumeOffsetNavigation = values[35] as Int,
-            volumeOffsetAssistant = values[36] as Int,
-            defaultPhoneName = values[37] as String,
-            manualIpEnabled = values[38] as Boolean,
-            manualIpAddress = values[39] as String,
-            btMacOverride = values[40] as String,
-            logUploadEnabled = values[41] as Boolean,
-            logUploadUrl = values[42] as String,
-            logUploadToken = values[43] as String,
-            logUploadDeviceLabel = values[44] as String,
-            logPersistEnabled = values[45] as Boolean,
-            alwaysInPark = values[46] as Boolean,
-            simulateIgnitionButton = values[47] as Boolean,
-            overlayPhoneSwitchButton = values[48] as Boolean,
-            overlayReconnectButton = values[49] as Boolean,
-            evContributionConsent = values[50] as Boolean,
-            oalUiScalePercent = values[51] as Int,
+            fileLoggingEnabled = values[18] as Boolean,
+            fileLoggingAutoStartUsb = values[19] as Boolean,
+            logcatCaptureEnabled = values[20] as Boolean,
+            hideAaClock = values[21] as Boolean,
+            hidePhoneSignal = values[22] as Boolean,
+            hideBatteryLevel = values[23] as Boolean,
+            sendImuSensors = values[24] as Boolean,
+            distanceUnits = values[25] as String,
+            safeAreaTop = values[26] as Int,
+            safeAreaBottom = values[27] as Int,
+            safeAreaLeft = values[28] as Int,
+            safeAreaRight = values[29] as Int,
+            keyRemap = values[30] as String,
+            volumeOffsetMedia = values[31] as Int,
+            volumeOffsetNavigation = values[32] as Int,
+            volumeOffsetAssistant = values[33] as Int,
+            btMacOverride = values[34] as String,
+            logUploadEnabled = values[35] as Boolean,
+            logUploadUrl = values[36] as String,
+            logUploadToken = values[37] as String,
+            logUploadDeviceLabel = values[38] as String,
+            logPersistEnabled = values[39] as Boolean,
+            alwaysInPark = values[40] as Boolean,
+            simulateIgnitionButton = values[41] as Boolean,
+            evContributionConsent = values[42] as Boolean,
+            oalUiScalePercent = values[43] as Int,
         )
     }.stateIn(
         viewModelScope,
@@ -762,76 +736,6 @@ class SettingsViewModel @JvmOverloads constructor(
         SharingStarted.WhileSubscribed(5000),
         SettingsUiState()
     )
-
-    // ── Multi-phone (Car Hotspot mode) ─────────────────────────────────
-    // Exposed as separate flows rather than baked into [SettingsUiState] —
-    // [combine] is already at its max-arg limit and the multi-phone settings
-    // change independently of the rest.
-
-    private val knownPhonesStore = com.openautolink.app.data.KnownPhonesStore(preferences)
-
-    val connectionMode: StateFlow<String> = preferences.connectionMode.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        AppPreferences.DEFAULT_CONNECTION_MODE,
-    )
-
-    val defaultPhoneId: StateFlow<String> = preferences.defaultPhoneId.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        AppPreferences.DEFAULT_DEFAULT_PHONE_ID,
-    )
-
-    val knownPhones: StateFlow<List<com.openautolink.app.data.KnownPhone>> =
-        knownPhonesStore.phones.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            emptyList(),
-        )
-
-    val alwaysAskPhone: StateFlow<Boolean> = preferences.alwaysAskPhone.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        AppPreferences.DEFAULT_ALWAYS_ASK_PHONE,
-    )
-
-    fun updateConnectionMode(mode: String) {
-        viewModelScope.launch { preferences.setConnectionMode(mode) }
-    }
-
-    fun setDefaultPhoneId(id: String) {
-        viewModelScope.launch { preferences.setDefaultPhoneId(id) }
-    }
-
-    fun forgetKnownPhone(id: String) {
-        viewModelScope.launch { knownPhonesStore.remove(id) }
-    }
-
-    fun setAlwaysAskPhone(enabled: Boolean) {
-        viewModelScope.launch { preferences.setAlwaysAskPhone(enabled) }
-    }
-
-    val carHotspotAutoInterface: StateFlow<Boolean> =
-        preferences.carHotspotAutoInterface.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            AppPreferences.DEFAULT_CAR_HOTSPOT_AUTO_INTERFACE,
-        )
-
-    val carHotspotInterfaceName: StateFlow<String> =
-        preferences.carHotspotInterfaceName.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            AppPreferences.DEFAULT_CAR_HOTSPOT_INTERFACE_NAME,
-        )
-
-    fun setCarHotspotAutoInterface(enabled: Boolean) {
-        viewModelScope.launch { preferences.setCarHotspotAutoInterface(enabled) }
-    }
-
-    fun setCarHotspotInterfaceName(name: String) {
-        viewModelScope.launch { preferences.setCarHotspotInterfaceName(name) }
-    }
 
     /**
      * Snapshot of currently-up, non-virtual interfaces from
@@ -999,20 +903,6 @@ class SettingsViewModel @JvmOverloads constructor(
         viewModelScope.launch { preferences.setAlwaysInPark(enabled) }
     }
 
-    fun updateClusterNavigation(enabled: Boolean) = setClusterEnabled(enabled)
-
-    fun updateOverlayStatsButton(visible: Boolean) {
-        viewModelScope.launch { preferences.setOverlayStatsButton(visible) }
-    }
-
-    fun updateOverlayPhoneSwitchButton(visible: Boolean) {
-        viewModelScope.launch { preferences.setOverlayPhoneSwitchButton(visible) }
-    }
-
-    fun updateOverlayReconnectButton(visible: Boolean) {
-        viewModelScope.launch { preferences.setOverlayReconnectButton(visible) }
-    }
-
     fun updateFileLoggingEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setFileLoggingEnabled(enabled) }
     }
@@ -1070,10 +960,6 @@ class SettingsViewModel @JvmOverloads constructor(
 
     fun updateLogUploadDeviceLabel(label: String) {
         viewModelScope.launch { preferences.setLogUploadDeviceLabel(label) }
-    }
-
-    fun updateSyncAaTheme(enabled: Boolean) {
-        viewModelScope.launch { preferences.setSyncAaTheme(enabled) }
     }
 
     fun updateHideAaClock(enabled: Boolean) {
@@ -1135,14 +1021,6 @@ class SettingsViewModel @JvmOverloads constructor(
         saveAudio { preferences.setVolumeOffsetAssistant(offset) }
     }
 
-    fun updateManualIpEnabled(enabled: Boolean) {
-        viewModelScope.launch { preferences.setManualIpEnabled(enabled) }
-    }
-
-    fun updateManualIpAddress(address: String) {
-        viewModelScope.launch { preferences.setManualIpAddress(address) }
-    }
-
     override fun onCleared() {
         wppConfigServer.stop()
         super.onCleared()
@@ -1152,77 +1030,44 @@ class SettingsViewModel @JvmOverloads constructor(
     fun saveAndReconnect() {
         viewModelScope.launch {
             val sm = com.openautolink.app.session.SessionManager.instanceOrNull() ?: return@launch
-            val codec = preferences.videoCodec.first()
-            val seedIdrThresholds = preferences.seedIdrThresholds.first()
-            val micSrc = preferences.micSource.first()
-            val scalingMode = preferences.videoScalingMode.first()
-            val hotspotSsid = preferences.hotspotSsid.first()
-            val hotspotPassword = preferences.hotspotPassword.first()
-            val directTransport = preferences.effectiveDirectTransport.first()
             val wppInterfaceName = _wppApInterfaceOverride.value
             preferences.setWppApInterface(wppInterfaceName)
-            val videoAutoNeg = preferences.videoAutoNegotiate.first()
-            val aaRes = preferences.aaResolution.first()
-            val aaDpi = preferences.aaDpi.first()
-            val aaAutoDpi = preferences.aaAutoDpi.first()
-            val aaWM = preferences.aaWidthMargin.first()
-            val aaHM = preferences.aaHeightMargin.first()
-            val aaPA = preferences.aaPixelAspect.first()
-            val aaTargetLayoutDp = preferences.aaTargetLayoutWidthDp.first()
-            val aaViewDistMm = preferences.aaViewingDistanceMm.first()
-            val aaDecAddDepth = preferences.aaDecoderAdditionalDepth.first()
-            val aaAutoM = preferences.aaAutoMargins.first()
-            val videoFps = preferences.videoFps.first()
-            val galVersion = preferences.galVersion.first()
-            val driveSide = preferences.driveSide.first()
-            val hideClock = preferences.hideAaClock.first()
-            val hideSignal = preferences.hidePhoneSignal.first()
-            val hideBattery = preferences.hideBatteryLevel.first()
-            val gpsForwarding = preferences.gpsForwarding.first()
-            val volMedia = preferences.volumeOffsetMedia.first()
-            val volNav = preferences.volumeOffsetNavigation.first()
-            val volAssistant = preferences.volumeOffsetAssistant.first()
-            val manualIpEnabled = preferences.manualIpEnabled.first()
-            val manualIp = if (manualIpEnabled) preferences.manualIpAddress.first().takeIf { it.isNotBlank() } else null
-            val saTop = preferences.safeAreaTop.first()
-            val saBottom = preferences.safeAreaBottom.first()
-            val saLeft = preferences.safeAreaLeft.first()
-            val saRight = preferences.safeAreaRight.first()
+            val c = preferences.aaSessionConfig().copy(wppInterfaceName = wppInterfaceName)
             sm.reconnect(
-                codecPreference = codec,
-                micSourcePreference = micSrc,
-                scalingMode = scalingMode,
-                directTransport = directTransport,
-                wppInterfaceName = wppInterfaceName,
-                hotspotSsid = hotspotSsid,
-                hotspotPassword = hotspotPassword,
-                videoAutoNegotiate = videoAutoNeg,
-                aaResolution = aaRes,
-                aaDpi = aaDpi,
-                aaAutoDpi = aaAutoDpi,
-                aaWidthMargin = aaWM,
-                aaHeightMargin = aaHM,
-                aaPixelAspect = aaPA,
-                aaTargetLayoutWidthDp = aaTargetLayoutDp,
-                aaViewingDistanceMm = aaViewDistMm,
-                aaDecoderAdditionalDepth = aaDecAddDepth,
-                aaAutoMargins = aaAutoM,
-                videoFps = videoFps,
-                driveSide = driveSide,
-                hideClock = hideClock,
-                hideSignal = hideSignal,
-                hideBattery = hideBattery,
-                volumeOffsetMedia = volMedia,
-                volumeOffsetNavigation = volNav,
-                volumeOffsetAssistant = volAssistant,
-                manualIpAddress = manualIp,
-                safeAreaTop = saTop,
-                safeAreaBottom = saBottom,
-                safeAreaLeft = saLeft,
-                safeAreaRight = saRight,
-                gpsForwarding = gpsForwarding,
-                galVersion = galVersion,
-                seedIdrThresholds = seedIdrThresholds,
+                codecPreference = c.codecPreference,
+                micSourcePreference = c.micSourcePreference,
+                scalingMode = c.scalingMode,
+                directTransport = c.directTransport,
+                wppInterfaceName = c.wppInterfaceName,
+                hotspotSsid = c.hotspotSsid,
+                hotspotPassword = c.hotspotPassword,
+                videoAutoNegotiate = c.videoAutoNegotiate,
+                aaResolution = c.aaResolution,
+                aaDpi = c.aaDpi,
+                aaAutoDpi = c.aaAutoDpi,
+                aaWidthMargin = c.aaWidthMargin,
+                aaHeightMargin = c.aaHeightMargin,
+                aaPixelAspect = c.aaPixelAspect,
+                aaTargetLayoutWidthDp = c.aaTargetLayoutWidthDp,
+                aaViewingDistanceMm = c.aaViewingDistanceMm,
+                aaDecoderAdditionalDepth = c.aaDecoderAdditionalDepth,
+                aaAutoMargins = c.aaAutoMargins,
+                videoFps = c.videoFps,
+                driveSide = c.driveSide,
+                hideClock = c.hideClock,
+                hideSignal = c.hideSignal,
+                hideBattery = c.hideBattery,
+                volumeOffsetMedia = c.volumeOffsetMedia,
+                volumeOffsetNavigation = c.volumeOffsetNavigation,
+                volumeOffsetAssistant = c.volumeOffsetAssistant,
+                manualIpAddress = c.manualIpAddress,
+                safeAreaTop = c.safeAreaTop,
+                safeAreaBottom = c.safeAreaBottom,
+                safeAreaLeft = c.safeAreaLeft,
+                safeAreaRight = c.safeAreaRight,
+                gpsForwarding = c.gpsForwarding,
+                galVersion = c.galVersion,
+                seedIdrThresholds = c.seedIdrThresholds,
             )
         }
     }

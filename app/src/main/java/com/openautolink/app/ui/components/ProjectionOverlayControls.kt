@@ -48,8 +48,6 @@ fun ProjectionOverlayControls(
     onStats: () -> Unit,
     onReconnect: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    onSwitchPhone: (() -> Unit)? = null,
-    carHotspotSwitching: Boolean = false,
     onFileLogging: (() -> Unit)? = null,
     onUpload: (() -> Unit)? = null,
     onSimulateIgnition: (() -> Unit)? = null,
@@ -61,11 +59,6 @@ fun ProjectionOverlayControls(
     // Callback/capability availability and the actual diagnostic enable flags do.
     val controls = buildList {
         add(OverlayControl("Settings", Icons.Default.Settings, onSettings))
-        if (onSwitchPhone != null) {
-            add(OverlayControl("Switch Phone", Icons.Default.PhoneAndroid, onSwitchPhone,
-                if (carHotspotSwitching) "Switching phone" else null,
-                if (carHotspotSwitching) colors.tertiary else Color.Unspecified))
-        }
         add(OverlayControl("Stats for nerds", Icons.Default.Info, onStats,
             if (uiState.showStats) "Visible" else null,
             if (uiState.showStats) colors.primary else Color.Unspecified))

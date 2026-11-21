@@ -51,7 +51,9 @@ class OalApplication : Application() {
         com.openautolink.app.diagnostics.gm.GmAdmissionDiagnostics.initializeMain(this)
         // Application is created before ConnectionService too: no Settings/Activity visit is
         // required to load durable call intent. Admission remains closed while the IO load runs.
-        com.openautolink.app.carplay.CarPlayCallController.get(this)
+        if (com.openautolink.app.ui.settings.CarPlayMfiAssetBootstrap.available(this)) {
+            com.openautolink.app.carplay.CarPlayCallController.get(this)
+        }
         com.openautolink.app.diagnostics.MediaDiagnosticHooks.install(this)
         // Install before any session infrastructure can launch AndroidX CarAppActivity.
         // onActivityPreCreated applies zero-alpha/non-focusable protection before

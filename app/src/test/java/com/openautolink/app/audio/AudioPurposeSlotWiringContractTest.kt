@@ -90,14 +90,6 @@ class AudioPurposeSlotWiringContractTest {
         )
         assertTrue(source.contains("Audio stop applied:"))
         assertTrue(source.contains("flushed=true"))
-        val aacFeed = source.substringAfter("fun feedAac(data: ByteArray)")
-            .substringBefore("fun release()")
-        assertTrue(aacFeed.contains("aacDecoder === decoder && active.get()"))
-        val retire = source.substringAfter("private fun retireDrain(reason: String)")
-            .substringBefore("fun setVolume(")
-        assertTrue(retire.contains("val retiredDecoder = aacDecoder"))
-        assertTrue(retire.indexOf("aacDecoder = null") < retire.indexOf("retiredDecoder?.stop()"))
-        assertTrue(retire.contains("aacRetired=${'$'}{retiredDecoder != null}"))
         val drain = projectFile(
             "app/src/main/java/com/openautolink/app/audio/BoundedAudioDrain.kt",
         ).readText()

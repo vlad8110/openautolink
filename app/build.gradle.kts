@@ -167,10 +167,8 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
-    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
-    debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 
     // Navigation
@@ -198,17 +196,11 @@ dependencies {
     // Protobuf (AA wire protocol for direct mode)
     implementation(libs.protobuf.javalite)
 
-    // Conscrypt (TLS provider for AA SSL handshake)
-    implementation(libs.conscrypt.android)
-
     // Testing
     testImplementation(libs.junit)
-    testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
-    androidTestImplementation(platform(libs.compose.bom))
-    androidTestImplementation(libs.compose.ui.test.junit4)
 }

@@ -36,7 +36,7 @@ import org.robolectric.annotation.ConscryptMode
 class ProjectionOverlayLayoutTest {
     @get:Rule val compose = createOalComposeRule()
     private val prefs get() = RuntimeEnvironment.getApplication().getSharedPreferences("overlay_positions", Context.MODE_PRIVATE)
-    private val labels = listOf("Settings", "Switch Phone", "Stats for nerds", "Reconnect",
+    private val labels = listOf("Settings", "Stats for nerds", "Reconnect",
         "File Logging", "Upload Logs", "Simulate ignition cycle")
 
     @Before fun clearPositions() {
@@ -59,11 +59,10 @@ class ProjectionOverlayLayoutTest {
                 MaterialTheme {
                     Box(Modifier.size(900.dp, height.value).testTag("viewport")) {
                         ProjectionOverlayControls(
-                            ProjectionUiState(overlayStatsButton = false, overlayPhoneSwitchButton = false,
-                                overlayReconnectButton = false, simulateIgnitionButton = true,
+                            ProjectionUiState(simulateIgnitionButton = true,
                                 fileLoggingEnabled = true, uploadEnabled = true),
                             onSettings = { clicked += "Settings" }, onStats = { clicked += "Stats for nerds" },
-                            onReconnect = { clicked += "Reconnect" }, onSwitchPhone = { clicked += "Switch Phone" },
+                            onReconnect = { clicked += "Reconnect" },
                             onFileLogging = { clicked += "File Logging" }, onUpload = { clicked += "Upload Logs" },
                             onSimulateIgnition = { clicked += "Simulate ignition cycle" },
                         )
@@ -143,7 +142,7 @@ class ProjectionOverlayLayoutTest {
         }
     }
 
-    @Test fun `menu shows current stats logging switching and upload status`() {
+    @Test fun `menu shows current stats logging and upload status`() {
         val upload = mutableStateOf(LogUploadState.UPLOADING)
         compose.setContent {
             MaterialTheme {
@@ -151,12 +150,12 @@ class ProjectionOverlayLayoutTest {
                     ProjectionOverlayControls(ProjectionUiState(showStats = true, fileLoggingEnabled = true,
                         fileLoggingActive = true, uploadEnabled = true, uploadState = upload.value),
                         onSettings = {}, onStats = {}, onReconnect = null,
-                        onSwitchPhone = {}, carHotspotSwitching = true, onFileLogging = {}, onUpload = {})
+                        onFileLogging = {}, onUpload = {})
                 }
             }
         }
         openMenu()
-        for ((label, status) in listOf("Switch Phone" to "Switching phone", "Stats for nerds" to "Visible",
+        for ((label, status) in listOf("Stats for nerds" to "Visible",
                 "File Logging" to "Recording", "Upload Logs" to "Uploading")) {
             compose.onNodeWithTag("overlayRecoveryAction:$label").performScrollTo()
             compose.onNodeWithText(status, useUnmergedTree = true).assertIsDisplayed()

@@ -14,8 +14,6 @@ package com.openautolink.app.transport
  *
  *  - the companion's TCP server, identity probe, and UDP discovery all bind
  *    IPv4 sockets ([com.openautolink.companion] `TcpAdvertiser`),
- *  - the car-side gateway fallback ([com.openautolink.app.transport.hotspot.TcpConnector.getGatewayIp])
- *    derives an IPv4 address from DHCP,
  *  - the /24 subnet sweep ([PhoneDiscovery]) is IPv4-only.
  *
  * On a phone-hotspot link the phone's *global* IPv6 address (e.g. a cellular

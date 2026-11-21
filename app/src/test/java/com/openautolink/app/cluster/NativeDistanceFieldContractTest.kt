@@ -34,7 +34,7 @@ class NativeDistanceFieldContractTest {
     private fun trips(value: String?, wireUnit: String?, raw: Int?): List<Trip> {
         val state = ManeuverState(ManeuverType.UNKNOWN, raw, "", "Test road", null,
             cue = "Test instruction", displayDistance = value, displayDistanceUnit = wireUnit)
-        return listOf<Session>(spyk(ClusterMainSession()), spyk(OalClusterSession())).map { session ->
+        return listOf<Session>(spyk(ClusterMainSession())).map { session ->
             every { session.carContext } returns context
             session.javaClass.getDeclaredMethod("buildTrip", ManeuverState::class.java)
                 .apply { isAccessible = true }.invoke(session, state) as Trip

@@ -42,7 +42,7 @@ class ManeuverHostModelIntegrationTest {
         return Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP)
     }
     @Test fun allTypesAndBitmapStatesBuildRealTripsOnBothConsumers() {
-        val sessions = listOf<Session>(spyk(OalClusterSession()),spyk(ClusterMainSession()))
+        val sessions = listOf<Session>(spyk(ClusterMainSession()))
         for (session in sessions) {
             every { session.carContext } returns context
             val build=session.javaClass.getDeclaredMethod("buildTrip",ManeuverState::class.java).apply { isAccessible=true }
@@ -68,41 +68,5 @@ class ManeuverHostModelIntegrationTest {
             assertEquals(type.name,androidx.core.graphics.drawable.IconCompat.TYPE_BITMAP,valid.icon!!.icon!!.type)
         }
         assertEquals(Maneuver.TYPE_TURN_NORMAL_LEFT,buildManeuver(state(ManeuverType.TURN_LEFT,png),context).type)
-    }
-    @Test fun nonGmUnavailableGuidanceEndsHostWithoutEndingRouteThenRestartsOnReady() {
-        val session=spyk(OalClusterSession())
-        every { session.carContext } returns context
-        val manager=mockk<androidx.car.app.navigation.NavigationManager>(relaxed=true)
-        OalClusterSession::class.java.getDeclaredField("navigationManager").apply { isAccessible=true }.set(session,manager)
-        val process=OalClusterSession::class.java.getDeclaredMethod("processStateUpdate",ManeuverState::class.java)
-            .apply { isAccessible=true }
-        try {
-            ClusterNavigationState.clearHost()
-            val mapped=state(ManeuverType.UNKNOWN,null)
-            ClusterNavigationState.updateHost(mapped)
-            process.invoke(session,mapped)
-            verify(exactly=1) { manager.navigationStarted() }
-            verify(exactly=1) { manager.updateTrip(any()) }
-            ClusterNavigationState.updateHost(null)
-            process.invoke(session,null)
-            assertTrue(ClusterNavigationState.isActive)
-            verify(exactly=1) { manager.navigationEnded() }
-            ClusterNavigationState.updateHost(mapped)
-            process.invoke(session,mapped)
-            verify(exactly=2) { manager.navigationStarted() }
-            verify(exactly=2) { manager.updateTrip(any()) }
-        } finally { ClusterNavigationState.clearHost() }
-    }
-    @Test fun nonGmTemplateKeepsRoadAndDistanceForUnsupportedDirection() {
-        val screen=OalClusterScreen(context)
-        for (type in ManeuverType.entries) {
-            screen.updateState(state(type,null).copy(lanes=listOf(
-                com.openautolink.app.navigation.LaneInfo(listOf(
-                    com.openautolink.app.navigation.LaneDirectionInfo("straight",true))))))
-            val template=screen.onGetTemplate() as NavigationTemplate
-            val routing=template.navigationInfo as RoutingInfo
-            assertEquals("Road",routing.currentStep!!.road!!.toString())
-            assertNotNull(routing.currentDistance)
-        }
     }
 }

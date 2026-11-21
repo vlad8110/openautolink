@@ -55,7 +55,6 @@ object ProxySocketOwnershipCases {
                 override fun onConnecting() {}
                 override fun onProxyConnected() {}
                 override fun onProxyDisconnected() { disconnected.incrementAndGet(); disconnectHook() }
-                override fun onLaunchTimeout() {}
             })
             advertiser = a
             setField(a, "isRunning", true)
@@ -143,7 +142,6 @@ object ProxySocketOwnershipCases {
         val aa = f.aa(p); bridge(aa, car.peer, mode)
         aa.shutdownOutput(); car.peer.shutdownOutput(); idle(p)
         eventually("exact advertiser socket retired $mode") { field(a, "activeCarSocket") == null && car.local.isClosed }
-        demand(field(a, "bridgeRelaunchJob") == null, "no launch against absent car $mode")
         demand(f.disconnected.get() == 1, "one disconnected notification $mode")
     }
     fun replacementDuringFinalizer(context: Context) = Fixture(context).use { f ->
@@ -205,7 +203,6 @@ object ProxySocketOwnershipCases {
         }
         demand(field(a, "activeCarSocket") === fresh.local && !fresh.local.isClosed, "stale proxy callback leaves exact successor intact")
         bridge(aa, fresh.peer, "after-delayed-old-event")
-        demand(field(a, "bridgeRelaunchJob") == null, "stale event schedules no relaunch")
     }
     fun cases(context: Context): Map<String, () -> Unit> = linkedMapOf(
         "prewarm" to { prewarm(context) }, "idleReplacement" to { idleReplacement(context) },

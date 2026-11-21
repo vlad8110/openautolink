@@ -13,6 +13,14 @@ internal class CarPlayMfiAssetBootstrap(
 ) {
     enum class Result { INSTALLED, EXISTING_VALID, NOT_BUNDLED, INVALID_BUNDLE, INVALID_EXISTING }
 
+    companion object {
+        /** Same two locations the CarPlay runtimes provision from; without either, CarPlay can never start. */
+        fun available(context: android.content.Context): Boolean =
+            File(context.noBackupFilesDir, LocalMfiAuthenticationClient.DIRECTORY).exists() ||
+                runCatching { context.assets.list(LocalMfiAuthenticationClient.DIRECTORY).orEmpty().toSet()
+                    .containsAll(listOf("identity.pk8", "certificate.p7b")) }.getOrDefault(false)
+    }
+
     fun install(): Result = synchronized(CarPlayCredentialImporter.LOCK) {
         val target = File(noBackupRoot, LocalMfiAuthenticationClient.DIRECTORY)
         val previous = File(noBackupRoot, "offline-mfi-previous")

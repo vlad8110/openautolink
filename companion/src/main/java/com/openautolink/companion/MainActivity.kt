@@ -37,7 +37,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestMissingPermissions()
         checkBatteryOptimization()
-        handleIntent(intent)
 
         val prefs = getSharedPreferences(CompanionPrefs.NAME, MODE_PRIVATE)
         // Move any legacy token out of the backed-up settings file before use.
@@ -54,20 +53,6 @@ class MainActivity : ComponentActivity() {
                     onStop = { stopCompanionService() },
                 )
             }
-        }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        handleIntent(intent)
-    }
-
-    private fun handleIntent(intent: Intent?) {
-        val uri = intent?.data ?: return
-        if (uri.scheme != "oalcompanion") return
-        when (uri.host) {
-            "start" -> startCompanionService()
-            "stop" -> stopCompanionService()
         }
     }
 
@@ -130,20 +115,8 @@ object CompanionPrefs {
     const val AUTO_START_BT = 1
     const val AUTO_START_WIFI = 2
     const val AUTO_START_APP_OPEN = 3
+    /** Retired "Bluetooth + car WiFi scan" mode; persisted values behave as [AUTO_START_BT]. */
     const val AUTO_START_BT_AND_WIFI = 4
-
-    // Car Hotspot WiFi credentials for WifiNetworkSpecifier auto-connect.
-    // Stored as Set<String>, each entry formatted as "ssid\tpassword".
-    const val CAR_WIFI_ENTRIES = "car_wifi_entries"
-
-    // Connection mode — distinguishes which side hosts the WiFi network.
-    // PHONE_HOTSPOT: phone is the AP, car is the client (current default).
-    // CAR_HOTSPOT:   car AP is the network, phone is one of N clients.
-    //                Multi-phone discovery via mDNS happens in this mode.
-    const val CONNECTION_MODE = "connection_mode"
-    const val MODE_PHONE_HOTSPOT = "phone_hotspot"
-    const val MODE_CAR_HOTSPOT = "car_hotspot"
-    const val DEFAULT_CONNECTION_MODE = MODE_CAR_HOTSPOT
 
     // Phone identity — published in mDNS TXT records so the car can tell
     // phones apart and remember a preferred default.

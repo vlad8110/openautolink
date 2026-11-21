@@ -72,7 +72,7 @@ class WppTcpServer(
          * so existing setup docs and firewall expectations still hold, but note
          * the roles are inverted here: this binds, the phone connects.
          */
-        const val DEFAULT_PORT = 5277
+        const val DEFAULT_PORT = com.openautolink.app.transport.OalProtocol.AA_PORT
 
         /** Accept backlog. One phone at a time; a small backlog absorbs retries. */
         private const val BACKLOG = 4
@@ -248,27 +248,6 @@ class WppTcpServer(
         }
     }
 
-    /**
-     * See TcpConnector.setKeepAliveParams — Java exposes only the on/off switch,
-     * so the timing constants need a native setsockopt via a dup'd FD. No hidden
-     * APIs; options set on the dup apply to the same kernel socket.
-     */
-    private fun setKeepAliveParams(socket: Socket, idleSec: Int, intervalSec: Int, count: Int) {
-        val IPPROTO_TCP = 6
-        val TCP_KEEPIDLE = 4
-        val TCP_KEEPINTVL = 5
-        val TCP_KEEPCNT = 6
-        val pfd = ParcelFileDescriptor.fromSocket(socket)
-        try {
-            val fd = pfd.fileDescriptor
-            Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPIDLE, idleSec)
-            Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPINTVL, intervalSec)
-            Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPCNT, count)
-        } finally {
-            pfd.close()
-        }
-    }
-
     fun stop() {
         var socketToClose: ServerSocket? = null
         var jobToCancel: Job? = null
@@ -291,5 +270,26 @@ class WppTcpServer(
         runCatching { socketToClose?.close() }
         jobToCancel?.cancel()
         OalLog.i(TAG, "WPP TCP server stopped")
+    }
+}
+
+/**
+ * Tune TCP keepalive so a dead phone is noticed within ~10 s instead of the
+ * kernel's 2-hour default. Java exposes only the on/off switch, so the timing
+ * constants go through a native setsockopt on a dup'd FD (same kernel socket).
+ */
+internal fun setKeepAliveParams(socket: Socket, idleSec: Int, intervalSec: Int, count: Int) {
+    val IPPROTO_TCP = 6
+    val TCP_KEEPIDLE = 4
+    val TCP_KEEPINTVL = 5
+    val TCP_KEEPCNT = 6
+    val pfd = ParcelFileDescriptor.fromSocket(socket)
+    try {
+        val fd = pfd.fileDescriptor
+        Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPIDLE, idleSec)
+        Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPINTVL, intervalSec)
+        Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPCNT, count)
+    } finally {
+        pfd.close()
     }
 }

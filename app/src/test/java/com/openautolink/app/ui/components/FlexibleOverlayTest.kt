@@ -42,7 +42,7 @@ class FlexibleOverlayTest {
         var stats = 0
         compose.setContent {
             MaterialTheme { Box(Modifier.size(900.dp, 400.dp).testTag("viewport")) {
-                ProjectionOverlayControls(ProjectionUiState(overlayStatsButton = true), { settings++ }, { stats++ }, null)
+                ProjectionOverlayControls(ProjectionUiState(), { settings++ }, { stats++ }, null)
             } }
         }
         compose.onNodeWithTag("overlayRecoveryButton").assertDoesNotExist()

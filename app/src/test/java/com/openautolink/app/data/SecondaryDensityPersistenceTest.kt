@@ -32,7 +32,7 @@ class SecondaryDensityPersistenceTest {
         val custom = SecondaryOutputPreference(true, AaSecondaryRole.AUXILIARY, aaDensityDpi = 140)
         val other = SecondaryOutputPreference(false, AaSecondaryRole.CLUSTER)
         try {
-            data.edit { it[AppPreferences.DISTANCE_UNITS] = "imperial"; it[AppPreferences.CUSTOM_VIEWPORT_WIDTH] = 1234 }
+            data.edit { it[AppPreferences.DISTANCE_UNITS] = "imperial"; it[androidx.datastore.preferences.core.intPreferencesKey("custom_viewport_width")] = 1234 }
             val unrelated = data.data.first().asMap()
             val prefs = preferences(data)
             assertTrue(prefs.getSecondaryDisplayPreferences().outputs.isEmpty())

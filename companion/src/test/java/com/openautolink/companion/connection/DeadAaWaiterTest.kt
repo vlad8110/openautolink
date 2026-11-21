@@ -169,7 +169,6 @@ class DeadAaWaiterTest {
             override fun onConnecting() = Unit
             override fun onProxyConnected() = Unit
             override fun onProxyDisconnected() = Unit
-            override fun onLaunchTimeout() = Unit
         })
         f.advertiser = a
         field(a, "isRunning").set(a, true)
@@ -225,7 +224,6 @@ class DeadAaWaiterTest {
             override fun onConnecting() = Unit
             override fun onProxyConnected() { connected.incrementAndGet() }
             override fun onProxyDisconnected() { disconnected.incrementAndGet() }
-            override fun onLaunchTimeout() = Unit
         })
         f.advertiser = a
         field(a, "isRunning").set(a, true)

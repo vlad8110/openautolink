@@ -7,11 +7,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
     <!-- Bluetooth (auto-start trigger when car BT connects) -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <!-- Legacy grant for bonded devices, adapter name and RFCOMM on Android 11 and below. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
@@ -26,10 +25,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Required by WifiJobService's persisted (reboot-surviving) JobInfo. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Maintainer verbose logcat capture: READ_LOGS is a signature/privileged
          permission a normal app cannot be granted at runtime. Declared here so a
          maintainer can grant it once via ADB
@@ -58,14 +57,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="oalcompanion" android:host="start" />
-                <data android:scheme="oalcompanion" android:host="stop" />
-            </intent-filter>
         </activity>
 
         <!-- Transparent activity for BAL bypass -->
@@ -81,21 +72,14 @@
         <service
             android:name=".service.CompanionService"
             android:enabled="true"
-            android:exported="true"
-            android:foregroundServiceType="connectedDevice">
-            <intent-filter>
-                <action android:name="com.openautolink.companion.ACTION_START" />
-                <action android:name="com.openautolink.companion.ACTION_STOP" />
-                <action android:name="com.openautolink.companion.ACTION_PREWARM" />
-                <action android:name="com.openautolink.companion.ACTION_UPLOAD_LOGS" />
-            </intent-filter>
-        </service>
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- WiFi auto-start job service -->
         <service
             android:name=".autostart.WifiJobService"
             android:permission="android.permission.BIND_JOB_SERVICE"
-            android:exported="true" />
+            android:exported="false" />
 
         <!-- Bluetooth auto-start receiver -->
         <receiver
@@ -108,15 +92,11 @@
             </intent-filter>
         </receiver>
 
-        <!-- WiFi state change receiver (NetworkCallback target) -->
+        <!-- WiFi state change receiver (target of the app's own NetworkCallback PendingIntent) -->
         <receiver
             android:name=".autostart.WifiReceiver"
             android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.net.wifi.STATE_CHANGE" />
-            </intent-filter>
-        </receiver>
+            android:exported="false" />
 
     </application>
 

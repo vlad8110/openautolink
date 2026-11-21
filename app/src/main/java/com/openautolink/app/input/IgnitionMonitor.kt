@@ -43,10 +43,6 @@ object IgnitionMonitor {
     /** IGNITION_STATE: 0=UNDEFINED, 1=LOCK, 2=OFF, 3=ACC, 4=ON, 5=START. Null until first read. */
     val ignitionState: StateFlow<Int?> = _ignitionState.asStateFlow()
 
-    private val _gearSelection = MutableStateFlow<Int?>(null)
-    /** Raw VehicleGear enum value. Null until first read. */
-    val gearSelection: StateFlow<Int?> = _gearSelection.asStateFlow()
-
     /** elapsedRealtime when ignitionState last transitioned to a non-ON value. */
     @Volatile
     private var ignitionOffStampMs: Long = 0L
@@ -80,7 +76,6 @@ object IgnitionMonitor {
     fun acceptProcessVehicleData(data: ControlMessage.VehicleData) {
         data.ignitionState?.let(::acceptIgnitionOn)
         data.gearRaw?.let { value ->
-            _gearSelection.value = value
             if (lastLoggedGear != value) {
                 DiagnosticLog.i(TAG, "GEAR_SELECTION → $value [was ${lastLoggedGear ?: "?"}]")
                 if (value == GEAR_PARK && lastLoggedGear != null) DiagnosticLog.i(TAG, "PARKED")
@@ -270,7 +265,6 @@ object IgnitionMonitor {
                 }
                 GEAR_SELECTION_ID -> {
                     val v = value as? Int ?: return
-                    _gearSelection.value = v
                     if (lastLoggedGear != v) {
                         DiagnosticLog.i(TAG, "GEAR_SELECTION → $v [was ${lastLoggedGear ?: "?"}]")
                         if (v == GEAR_PARK && lastLoggedGear != null) {

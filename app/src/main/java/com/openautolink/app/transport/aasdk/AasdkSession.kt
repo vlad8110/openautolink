@@ -318,8 +318,8 @@ class AasdkSession(
     // USB connection manager — only used in "usb" transport mode
     private var _usbConnectionManager: UsbConnectionManager? = null
 
-    /** Current transport mode: "hotspot", "usb", or "wpp". */
-    var transportMode: String = "hotspot"
+    /** Current transport mode: "usb" or "wpp" (anything else is treated as "wpp"). */
+    var transportMode: String = "wpp"
 
     /** Immutable interface name owned by this WPP session generation. */
     var wppInterfaceName: String = "ap_br_swlan0"
@@ -395,8 +395,7 @@ class AasdkSession(
 
         when (transportMode) {
             "usb" -> startUsb()
-            "wpp" -> startWpp()
-            else -> startTcp()
+            else -> startWpp()
         }
     }
 
@@ -522,13 +521,6 @@ class AasdkSession(
     }
 
     /**
-     * Dial a companion that the Bluetooth handshake just located.
-     *
-     * Called when the handshake selects the loopback endpoint, so the car socket
-     * is opened before Android Auto is told to connect - rather than the proxy
-     * holding an AA connection open waiting for a car that never dials.
-     */
-    /**
      * Invoked immediately before each native session start, so the UI can make
      * sure the decoder still has a surface.
      */
@@ -556,6 +548,13 @@ class AasdkSession(
     @Volatile
     private var selfInflictedTeardown = false
 
+    /**
+     * Dial a companion that the Bluetooth handshake just located.
+     *
+     * Called when the handshake selects the loopback endpoint, so the car socket
+     * is opened before Android Auto is told to connect - rather than the proxy
+     * holding an AA connection open waiting for a car that never dials.
+     */
     fun dialCompanion(ip: String) {
         if (!wirelessPermitted()) return
         // The ignition-cycle simulation holds the session down deliberately;
@@ -612,7 +611,7 @@ class AasdkSession(
 
     private fun startTcp(manualIp: String? = null) {
         if (!wirelessPermitted()) return
-        OalLog.i(TAG, "Starting TCP connector (hotspot or WPP companion-proxy transport)")
+        OalLog.i(TAG, "Starting TCP connector (WPP companion-proxy transport)")
         synchronized(connectionStartLock) {
             // Record at the common ownership boundary. WPP restart calls startTcp()
             // directly, so recording only in dialCompanion() leaves the guard stale.
@@ -625,7 +624,6 @@ class AasdkSession(
             _tcpConnector = null
             lateinit var connector: TcpConnector
             connector = TcpConnector(
-                context,
                 scope,
                 onSocketReady = { tcpSocket ->
                     scope.launch(Dispatchers.IO) {
@@ -733,17 +731,17 @@ class AasdkSession(
                 _connectionState.value = ConnectionState.DISCONNECTED
                 return
             }
-            transportPipe = pipe
-
             try {
+                // Publish only after create; see handleConnection().
                 resetSelectedVideoGeometry()
                 nativeSessionGeneration.set(AasdkNative.nativeCreateSession())
+                transportPipe = pipe
                 primeDesiredHeadUnitMuteOnNativeSession()
                 AasdkNative.nativeStartSession(pipe, telemetryCallback(), sdrConfig)
             } catch (e: Exception) {
                 OalLog.e(TAG, "Native session start failed (USB): ${e.message}")
                 pipe.close()
-                transportPipe = null
+                if (transportPipe === pipe) transportPipe = null
                 _connectionState.value = ConnectionState.DISCONNECTED
             }
         }
@@ -804,6 +802,7 @@ class AasdkSession(
         } catch (e: Exception) {
             OalLog.e(TAG, "Cannot bound TCP read for safe teardown: ${e.message}")
             runCatching { socket.close() }
+            _wppServer?.onSessionEnded()
             _connectionState.value = ConnectionState.DISCONNECTED
             return
         }
@@ -820,21 +819,26 @@ class AasdkSession(
         if (onNativeSessionStarting?.invoke() == false || !wirelessPermitted()) {
             OalLog.i(TAG, "TCP native start rejected by session owner")
             runCatching { socket.close() }
+            _wppServer?.onSessionEnded()
             _connectionState.value = ConnectionState.DISCONNECTED
             return
         }
 
-        transportPipe = AasdkTransportPipe(input, output)
+        val pipe = AasdkTransportPipe(input, output)
 
         try {
+            // Publish the new pipe only after create: creating stops the replaced
+            // session, whose onSessionStopped() closes and clears transportPipe.
             resetSelectedVideoGeometry()
             nativeSessionGeneration.set(AasdkNative.nativeCreateSession())
+            transportPipe = pipe
             primeDesiredHeadUnitMuteOnNativeSession()
-            AasdkNative.nativeStartSession(transportPipe!!, telemetryCallback(), sdrConfig)
+            AasdkNative.nativeStartSession(pipe, telemetryCallback(), sdrConfig)
         } catch (e: Exception) {
             OalLog.e(TAG, "Native session start failed: ${e.message}")
-            transportPipe?.close()
-            transportPipe = null
+            pipe.close()
+            if (transportPipe === pipe) transportPipe = null
+            _wppServer?.onSessionEnded()
             _connectionState.value = ConnectionState.DISCONNECTED
         }
         }
@@ -917,17 +921,7 @@ class AasdkSession(
             // Restart transport.
             when (transportMode) {
                 "usb" -> startUsb()
-                "wpp" -> startWpp(recovery = true)
-                else -> {
-                    // Same reason as the retry path: without the known address this
-                    // falls through to the gateway heuristic and dials the house
-                    // router.
-                    val known = com.openautolink.app.transport.bluetooth
-                        .AaWirelessBtControl.withIdentityValidatedCompanion { address ->
-                            startTcp(manualIp = address)
-                        }
-                    if (known == null) startTcp(manualIp = null)
-                }
+                else -> startWpp(recovery = true)
             }
         } finally {
             explicitStop = false
@@ -1078,8 +1072,9 @@ class AasdkSession(
         OalLog.i(TAG, "AA session stopped: $reason")
         _vehicleEnergyForecast.value = null
         // Clean up dead transport
-        transportPipe?.close()
+        runCatching { transportPipe?.close() }
         transportPipe = null
+        _wppServer?.onSessionEnded()
 
         // Phone-initiated user exit (Exit button in AA app launcher) — treat
         // as an explicit stop so the auto-reconnect path below is skipped.
@@ -1134,21 +1129,7 @@ class AasdkSession(
                     OalLog.i(TAG, "Restarting transport connector")
                     when (transportMode) {
                         "usb" -> startUsb()
-                        "wpp" -> startWpp(recovery = true)
-                        else -> {
-                            // Keep the companion's address on a retry.
-                            //
-                            // Without it startTcp() falls through to the gateway
-                            // heuristic, which on a head unit sitting on home
-                            // WiFi means repeatedly dialling the house router:
-                            //     Connecting to 192.168.0.1:5277 (gateway)  x10
-                            // The companion is never at the gateway in WPP mode.
-                            val known = com.openautolink.app.transport.bluetooth
-                                .AaWirelessBtControl.withIdentityValidatedCompanion { address ->
-                                    startTcp(manualIp = address)
-                                }
-                            if (known == null) startTcp(manualIp = null)
-                        }
+                        else -> startWpp(recovery = true)
                     }
                 }
             }

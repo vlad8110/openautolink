@@ -30,6 +30,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
  * App preferences backed by DataStore.
  */
 class AppPreferences private constructor(private val dataStore: DataStore<Preferences>) {
+    /** False when no MFi identity exists: CarPlay can never run, so it must never claim an iPhone. */
+    @Volatile private var carPlayMfiAvailable: () -> Boolean = { true }
     /** One process-owned observer per preference store. No optimistic wireless default. */
     val projectionConnectionPolicy = com.openautolink.app.transport.ProjectionConnectionPolicy()
     private val connectionPolicyScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
@@ -53,9 +55,11 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
     val effectiveDirectTransport: Flow<String> = dataStore.data.map {
         if (it[WIRED_ONLY] == true || it[DIRECT_TRANSPORT] == DIRECT_TRANSPORT_USB) DIRECT_TRANSPORT_USB else DIRECT_TRANSPORT_WPP
     }
+    /** Runtime view: saved settings, forced wired by wired-only and disabled without an MFi identity. */
     val effectiveCarPlaySettings: Flow<CarPlaySettings> = dataStore.data.map {
         val stored = CarPlaySettings.decode(it[CARPLAY_SETTINGS])
-        val saved = stored.copy(alwaysInPark = readAlwaysInPark(it, stored))
+        val saved = stored.copy(alwaysInPark = readAlwaysInPark(it, stored),
+            enabled = stored.enabled && carPlayMfiAvailable())
         if (it[WIRED_ONLY] == true) saved.copy(connectionMode = "usb") else saved
     }
     /** Optional release metadata shares the existing app store; construction performs no IO. */
@@ -153,6 +157,8 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         fun getInstance(context: Context): AppPreferences {
             return instance ?: synchronized(this) {
                 instance ?: AppPreferences(context.applicationContext.dataStore).also {
+                    val app = context.applicationContext
+                    it.carPlayMfiAvailable = { com.openautolink.app.ui.settings.CarPlayMfiAssetBootstrap.available(app) }
                     instance = it
                 }
             }
@@ -195,7 +201,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         // Does NOT affect call audio routing — calls always follow the
         // phone's BT pairing settings, regardless of what's in the SDR.
         val BT_MAC_OVERRIDE = stringPreferencesKey("bt_mac_override")
-        val SYNC_AA_THEME = booleanPreferencesKey("sync_aa_theme")
         val HIDE_AA_CLOCK = booleanPreferencesKey("hide_aa_clock")
         val HIDE_PHONE_SIGNAL = booleanPreferencesKey("hide_phone_signal")
         val HIDE_BATTERY_LEVEL = booleanPreferencesKey("hide_battery_level")
@@ -304,9 +309,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         private fun requestsNativeIcons(selection: ClusterOutputSelection): Boolean =
             selection.mode == ClusterDisplayMode.NATIVE_ICONS ||
                 (selection.mode == ClusterDisplayMode.MAP_VIDEO && selection.nativeIconsWithMap)
-        val OVERLAY_STATS_BUTTON = booleanPreferencesKey("overlay_stats_button")
-        val OVERLAY_PHONE_SWITCH_BUTTON = booleanPreferencesKey("overlay_phone_switch_button")
-        val OVERLAY_RECONNECT_BUTTON = booleanPreferencesKey("overlay_reconnect_button")
         val FILE_LOGGING_ENABLED = booleanPreferencesKey("file_logging_enabled")
         val FILE_LOGGING_AUTOSTART_USB = booleanPreferencesKey("file_logging_autostart_usb")
         val LOGCAT_CAPTURE_ENABLED = booleanPreferencesKey("logcat_capture_enabled")
@@ -358,10 +360,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         val SAFE_AREA_LEFT = intPreferencesKey("safe_area_left")
         val SAFE_AREA_RIGHT = intPreferencesKey("safe_area_right")
 
-        // Custom viewport
-        val CUSTOM_VIEWPORT_WIDTH = intPreferencesKey("custom_viewport_width")
-        val CUSTOM_VIEWPORT_HEIGHT = intPreferencesKey("custom_viewport_height")
-        val VIEWPORT_ASPECT_RATIO_LOCKED = booleanPreferencesKey("viewport_aspect_ratio_locked")
 
         // Key remapping — JSON string: {"androidKeycode": aaKeycode, ...}
         // e.g. {"138":88,"137":87} means F8→MEDIA_PREVIOUS, F7→MEDIA_NEXT
@@ -381,23 +379,11 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         //                    or "car_hotspot" (multi-phone over car AP).
         // - DEFAULT_PHONE_ID: stable phone_id (UUID published by companion in
         //   mDNS TXT) the car prefers when multiple phones are reachable.
-        // - KNOWN_PHONES_JSON: JSON array of `{phone_id, friendly_name,
-        //   last_seen_ms}` — the persistent list shown in the chooser even
-        //   when the phone isn't currently advertising.
         // - ALWAYS_ASK_PHONE: when true, the car never auto-connects to the
         //   default phone; the chooser is shown on every connect. (Behavior 2.)
-        // - CAR_HOTSPOT_AUTO_INTERFACE: when true (default), the discovery
-        //   sweep prefers known AP-bridge interfaces (e.g. ap_br_swlan0 on
-        //   GM AAOS) and falls back to other real interfaces. When false,
-        //   only [CAR_HOTSPOT_INTERFACE_NAME] is scanned.
-        // - CAR_HOTSPOT_INTERFACE_NAME: the explicit interface name to use
-        //   when auto-detection is disabled. Empty = first real iface.
         val CONNECTION_MODE = stringPreferencesKey("connection_mode")
         val DEFAULT_PHONE_ID = stringPreferencesKey("default_phone_id")
-        val KNOWN_PHONES_JSON = stringPreferencesKey("known_phones_json")
         val ALWAYS_ASK_PHONE = booleanPreferencesKey("always_ask_phone")
-        val CAR_HOTSPOT_AUTO_INTERFACE = booleanPreferencesKey("car_hotspot_auto_interface")
-        val CAR_HOTSPOT_INTERFACE_NAME = stringPreferencesKey("car_hotspot_interface_name")
 
         // EV energy model tuning — see docs/ev-energy-model-tuning-plan.md.
         // EV_TUNING_ENABLED is the master toggle; when false, all overrides
@@ -450,7 +436,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         }
         const val DEFAULT_MIC_SOURCE = "car"
         const val DEFAULT_BT_MAC_OVERRIDE = ""
-        const val DEFAULT_SYNC_AA_THEME = true
         const val DEFAULT_HIDE_AA_CLOCK = false
         const val DEFAULT_HIDE_PHONE_SIGNAL = false
         const val DEFAULT_HIDE_BATTERY_LEVEL = false
@@ -510,9 +495,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         const val DEFAULT_GPS_FORWARDING = true
         const val DEFAULT_ALWAYS_IN_PARK = false
         const val DEFAULT_CLUSTER_NAVIGATION = true
-        const val DEFAULT_OVERLAY_STATS_BUTTON = true
-        const val DEFAULT_OVERLAY_PHONE_SWITCH_BUTTON = true
-        const val DEFAULT_OVERLAY_RECONNECT_BUTTON = false
         const val DEFAULT_FILE_LOGGING_ENABLED = false
         const val DEFAULT_FILE_LOGGING_AUTOSTART_USB = false
         // On by default. There is no adb on the head unit, so this capture is
@@ -533,9 +515,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         const val DEFAULT_SAFE_AREA_BOTTOM = 0
         const val DEFAULT_SAFE_AREA_LEFT = 0
         const val DEFAULT_SAFE_AREA_RIGHT = 0
-        const val DEFAULT_CUSTOM_VIEWPORT_WIDTH = 0 // 0 = use full usable width
-        const val DEFAULT_CUSTOM_VIEWPORT_HEIGHT = 0 // 0 = use full usable height
-        const val DEFAULT_VIEWPORT_ASPECT_RATIO_LOCKED = true
         const val DEFAULT_KEY_REMAP = "" // empty = use built-in defaults
         const val DEFAULT_VOLUME_OFFSET_MEDIA = 0
         const val DEFAULT_VOLUME_OFFSET_NAVIGATION = 0
@@ -548,10 +527,7 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         const val CONNECTION_MODE_CAR_HOTSPOT = "car_hotspot"
         const val DEFAULT_CONNECTION_MODE = CONNECTION_MODE_CAR_HOTSPOT
         const val DEFAULT_DEFAULT_PHONE_ID = ""
-        const val DEFAULT_KNOWN_PHONES_JSON = "[]"
         const val DEFAULT_ALWAYS_ASK_PHONE = false
-        const val DEFAULT_CAR_HOTSPOT_AUTO_INTERFACE = true
-        const val DEFAULT_CAR_HOTSPOT_INTERFACE_NAME = ""
 
         // EV tuning defaults — must reproduce current hardcoded VEM behavior
         // when EV_TUNING_ENABLED=false (see sendEnergyModelSensor in
@@ -588,16 +564,8 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         stored.copy(alwaysInPark = readAlwaysInPark(prefs, stored))
     }
 
-    val carPlayEnabled: Flow<Boolean> = carPlaySettings.map { it.enabled }
-    val carPlayConnectionMode: Flow<String> = carPlaySettings.map { it.connectionMode }
-    val carPlayPhoneAddress: Flow<String> = carPlaySettings.map { it.phoneAddress }
-    val carPlayPeerAddress: Flow<String> = carPlaySettings.map { it.peerAddress }
-    val carPlayInterface: Flow<String> = carPlaySettings.map { it.interfaceName }
-    val carPlaySharedWifiOverride: Flow<Boolean> = carPlaySettings.map { it.sharedWifiOverride }
-    val carPlaySsid: Flow<String> = carPlaySettings.map { it.ssid }
-    val carPlayReceiverAddress: Flow<String> = carPlaySettings.map { it.receiverAddress }
-    val carPlayResolution: Flow<String> = carPlaySettings.map { it.resolution }
-    val carPlayFps: Flow<Int> = carPlaySettings.map { it.fps }
+    /** Runtime opt-in: false whenever the MFi identity is missing (see [effectiveCarPlaySettings]). */
+    val carPlayEnabled: Flow<Boolean> = effectiveCarPlaySettings.map { it.enabled }
 
     /** Change opt-in without overwriting a concurrently saved phone/network profile. */
     suspend fun setCarPlayEnabled(enabled: Boolean) {
@@ -669,10 +637,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
 
     val btMacOverride: Flow<String> = dataStore.data.map { prefs ->
         prefs[BT_MAC_OVERRIDE] ?: DEFAULT_BT_MAC_OVERRIDE
-    }
-
-    val syncAaTheme: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[SYNC_AA_THEME] ?: DEFAULT_SYNC_AA_THEME
     }
 
     val hideAaClock: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -809,18 +773,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
     /** Global native-icon compatibility view; new consumers must apply protocol-specific policy. */
     val clusterNavigation: Flow<Boolean> = clusterOutputSelection.map(::requestsNativeIcons)
 
-    val overlayStatsButton: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[OVERLAY_STATS_BUTTON] ?: DEFAULT_OVERLAY_STATS_BUTTON
-    }
-
-    val overlayPhoneSwitchButton: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[OVERLAY_PHONE_SWITCH_BUTTON] ?: DEFAULT_OVERLAY_PHONE_SWITCH_BUTTON
-    }
-
-    val overlayReconnectButton: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[OVERLAY_RECONNECT_BUTTON] ?: DEFAULT_OVERLAY_RECONNECT_BUTTON
-    }
-
     val fileLoggingEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[FILE_LOGGING_ENABLED] ?: DEFAULT_FILE_LOGGING_ENABLED
     }
@@ -883,18 +835,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
 
     val safeAreaRight: Flow<Int> = dataStore.data.map { prefs ->
         prefs[SAFE_AREA_RIGHT] ?: DEFAULT_SAFE_AREA_RIGHT
-    }
-
-    val customViewportWidth: Flow<Int> = dataStore.data.map { prefs ->
-        prefs[CUSTOM_VIEWPORT_WIDTH] ?: DEFAULT_CUSTOM_VIEWPORT_WIDTH
-    }
-
-    val customViewportHeight: Flow<Int> = dataStore.data.map { prefs ->
-        prefs[CUSTOM_VIEWPORT_HEIGHT] ?: DEFAULT_CUSTOM_VIEWPORT_HEIGHT
-    }
-
-    val viewportAspectRatioLocked: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[VIEWPORT_ASPECT_RATIO_LOCKED] ?: DEFAULT_VIEWPORT_ASPECT_RATIO_LOCKED
     }
 
     suspend fun setHotspotSsid(ssid: String) {
@@ -1070,10 +1010,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         dataStore.edit { it[BT_MAC_OVERRIDE] = cleaned }
     }
 
-    suspend fun setSyncAaTheme(enabled: Boolean) {
-        dataStore.edit { it[SYNC_AA_THEME] = enabled }
-    }
-
     suspend fun setHideAaClock(enabled: Boolean) {
         dataStore.edit { it[HIDE_AA_CLOCK] = enabled }
     }
@@ -1178,18 +1114,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         }
     }
 
-    suspend fun setOverlayStatsButton(visible: Boolean) {
-        dataStore.edit { it[OVERLAY_STATS_BUTTON] = visible }
-    }
-
-    suspend fun setOverlayPhoneSwitchButton(visible: Boolean) {
-        dataStore.edit { it[OVERLAY_PHONE_SWITCH_BUTTON] = visible }
-    }
-
-    suspend fun setOverlayReconnectButton(visible: Boolean) {
-        dataStore.edit { it[OVERLAY_RECONNECT_BUTTON] = visible }
-    }
-
     suspend fun setFileLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[FILE_LOGGING_ENABLED] = enabled }
     }
@@ -1220,18 +1144,6 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
 
     suspend fun setSafeAreaRight(value: Int) {
         dataStore.edit { it[SAFE_AREA_RIGHT] = value }
-    }
-
-    suspend fun setCustomViewportWidth(width: Int) {
-        dataStore.edit { it[CUSTOM_VIEWPORT_WIDTH] = width }
-    }
-
-    suspend fun setCustomViewportHeight(height: Int) {
-        dataStore.edit { it[CUSTOM_VIEWPORT_HEIGHT] = height }
-    }
-
-    suspend fun setViewportAspectRatioLocked(locked: Boolean) {
-        dataStore.edit { it[VIEWPORT_ASPECT_RATIO_LOCKED] = locked }
     }
 
     // Key remapping
@@ -1279,53 +1191,12 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
         prefs[CONNECTION_MODE] ?: DEFAULT_CONNECTION_MODE
     }
 
-    suspend fun setConnectionMode(mode: String) {
-        // Sanitize unknown values to the default rather than persisting junk.
-        val sanitized = when (mode) {
-            CONNECTION_MODE_PHONE_HOTSPOT, CONNECTION_MODE_CAR_HOTSPOT -> mode
-            else -> DEFAULT_CONNECTION_MODE
-        }
-        dataStore.edit { it[CONNECTION_MODE] = sanitized }
-    }
-
     val defaultPhoneId: Flow<String> = dataStore.data.map { prefs ->
         prefs[DEFAULT_PHONE_ID] ?: DEFAULT_DEFAULT_PHONE_ID
     }
 
-    suspend fun setDefaultPhoneId(id: String) {
-        dataStore.edit { it[DEFAULT_PHONE_ID] = id }
-    }
-
-    val knownPhonesJson: Flow<String> = dataStore.data.map { prefs ->
-        prefs[KNOWN_PHONES_JSON] ?: DEFAULT_KNOWN_PHONES_JSON
-    }
-
-    suspend fun setKnownPhonesJson(json: String) {
-        dataStore.edit { it[KNOWN_PHONES_JSON] = json }
-    }
-
     val alwaysAskPhone: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[ALWAYS_ASK_PHONE] ?: DEFAULT_ALWAYS_ASK_PHONE
-    }
-
-    suspend fun setAlwaysAskPhone(enabled: Boolean) {
-        dataStore.edit { it[ALWAYS_ASK_PHONE] = enabled }
-    }
-
-    val carHotspotAutoInterface: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[CAR_HOTSPOT_AUTO_INTERFACE] ?: DEFAULT_CAR_HOTSPOT_AUTO_INTERFACE
-    }
-
-    suspend fun setCarHotspotAutoInterface(enabled: Boolean) {
-        dataStore.edit { it[CAR_HOTSPOT_AUTO_INTERFACE] = enabled }
-    }
-
-    val carHotspotInterfaceName: Flow<String> = dataStore.data.map { prefs ->
-        prefs[CAR_HOTSPOT_INTERFACE_NAME] ?: DEFAULT_CAR_HOTSPOT_INTERFACE_NAME
-    }
-
-    suspend fun setCarHotspotInterfaceName(name: String) {
-        dataStore.edit { it[CAR_HOTSPOT_INTERFACE_NAME] = name }
     }
 
     // ── EV energy model tuning ──────────────────────────────────────
@@ -1441,4 +1312,80 @@ class AppPreferences private constructor(private val dataStore: DataStore<Prefer
     suspend fun setEvLearnedRatesJson(json: String) {
         dataStore.edit { it[EV_LEARNED_RATES_JSON] = json }
     }
+
+    /** Every saved setting an Android Auto session start/reconnect reads, in one place. */
+    data class AaSessionConfig(
+        val codecPreference: String,
+        val seedIdrThresholds: SeedIdrThresholds,
+        val micSourcePreference: String,
+        val scalingMode: String,
+        val hotspotSsid: String,
+        val hotspotPassword: String,
+        val directTransport: String,
+        val wppInterfaceName: String,
+        val videoAutoNegotiate: Boolean,
+        val aaResolution: String,
+        val aaDpi: Int,
+        val aaAutoDpi: Boolean,
+        val aaWidthMargin: Int,
+        val aaHeightMargin: Int,
+        val aaPixelAspect: Int,
+        val aaTargetLayoutWidthDp: Int,
+        val aaViewingDistanceMm: Int,
+        val aaDecoderAdditionalDepth: Int,
+        val aaAutoMargins: Boolean,
+        val videoFps: Int,
+        val galVersion: String,
+        val driveSide: String,
+        val hideClock: Boolean,
+        val hideSignal: Boolean,
+        val hideBattery: Boolean,
+        val gpsForwarding: Boolean,
+        val safeAreaTop: Int,
+        val safeAreaBottom: Int,
+        val safeAreaLeft: Int,
+        val safeAreaRight: Int,
+        val volumeOffsetMedia: Int,
+        val volumeOffsetNavigation: Int,
+        val volumeOffsetAssistant: Int,
+        /** Manual IP for emulator testing; null unless enabled and non-blank. */
+        val manualIpAddress: String?,
+    )
+
+    suspend fun aaSessionConfig(): AaSessionConfig = AaSessionConfig(
+        codecPreference = videoCodec.first(),
+        seedIdrThresholds = seedIdrThresholds.first(),
+        micSourcePreference = micSource.first(),
+        scalingMode = videoScalingMode.first(),
+        hotspotSsid = hotspotSsid.first(),
+        hotspotPassword = hotspotPassword.first(),
+        directTransport = effectiveDirectTransport.first(),
+        wppInterfaceName = wppApInterface.first(),
+        videoAutoNegotiate = videoAutoNegotiate.first(),
+        aaResolution = aaResolution.first(),
+        aaDpi = aaDpi.first(),
+        aaAutoDpi = aaAutoDpi.first(),
+        aaWidthMargin = aaWidthMargin.first(),
+        aaHeightMargin = aaHeightMargin.first(),
+        aaPixelAspect = aaPixelAspect.first(),
+        aaTargetLayoutWidthDp = aaTargetLayoutWidthDp.first(),
+        aaViewingDistanceMm = aaViewingDistanceMm.first(),
+        aaDecoderAdditionalDepth = aaDecoderAdditionalDepth.first(),
+        aaAutoMargins = aaAutoMargins.first(),
+        videoFps = videoFps.first(),
+        galVersion = galVersion.first(),
+        driveSide = driveSide.first(),
+        hideClock = hideAaClock.first(),
+        hideSignal = hidePhoneSignal.first(),
+        hideBattery = hideBatteryLevel.first(),
+        gpsForwarding = gpsForwarding.first(),
+        safeAreaTop = safeAreaTop.first(),
+        safeAreaBottom = safeAreaBottom.first(),
+        safeAreaLeft = safeAreaLeft.first(),
+        safeAreaRight = safeAreaRight.first(),
+        volumeOffsetMedia = volumeOffsetMedia.first(),
+        volumeOffsetNavigation = volumeOffsetNavigation.first(),
+        volumeOffsetAssistant = volumeOffsetAssistant.first(),
+        manualIpAddress = if (manualIpEnabled.first()) manualIpAddress.first().takeIf { it.isNotBlank() } else null,
+    )
 }

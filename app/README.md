@@ -44,4 +44,4 @@ Stream logs to your laptop over TCP when ADB is unavailable (e.g., GM head units
 2. Tap **Start Log Server** (listens on port 6555)
 3. From your laptop on the same network: `nc <car-ip> 6555`
 
-See [docs/testing.md](../docs/testing.md#10-remote-diagnostics-no-adb-required) for full details.
+See [docs/live-diagnostics.md](../docs/live-diagnostics.md) for details.

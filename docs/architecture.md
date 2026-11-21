@@ -2,7 +2,7 @@
 
 ## Design Principles
 
-1. **Bridge-native**: The app exists to display what the bridge sends. No USB adapter abstraction layer. The app is phone-protocol-agnostic — it speaks OAL and renders identically
+1. **Direct**: The app runs the Android Auto receiver itself (aasdk over JNI). No external bridge or SBC
 2. **Island independence**: Each component is a self-contained package with public API, internal implementation, and its own test suite
 3. **Test-anchored**: Tests define the contract. Write interface → write tests → write implementation
 4. **Real-time first**: Video is disposable, audio is sacred, touch is immediate. Latency over completeness
@@ -12,60 +12,19 @@
 
 ### 1. Transport (`com.openautolink.app.transport`)
 
-The TCP connection manager. Owns 3 connections to the bridge.
+Runs the Android Auto session directly on the head unit. `AasdkSession` drives
+native aasdk over JNI (`app/src/main/cpp`) and exposes `connectionState`,
+`controlMessages`, video and audio to `SessionManager`.
 
-**Public API:**
-```kotlin
-interface BridgeConnection {
-    val connectionState: StateFlow<ConnectionState>
-    val controlMessages: Flow<ControlMessage>
-    val videoFrames: Flow<VideoFrame>
-    val audioFrames: Flow<AudioFrame>
+Two phone transports:
+- **USB** (`usb/UsbConnectionManager`): the phone is switched to Android Open
+  Accessory mode and the AA byte stream flows over the USB pipe.
+- **Wireless (WPP)** (`bluetooth/AaWirelessBtControl`, `hotspot/WppTcpServer`,
+  `hotspot/TcpConnector`): Bluetooth RFCOMM handshake tells the phone the car
+  hotspot details; the car then talks to the phone's companion proxy over TCP
+  on port 5277. See [wireless-wpp.md](wireless-wpp.md).
 
-    suspend fun connect(host: String, controlPort: Int = 5288)
-    suspend fun disconnect()
-    suspend fun sendControlMessage(message: ControlMessage)
-    suspend fun sendTouchEvent(event: TouchEvent)
-    suspend fun sendGnssData(nmea: String)
-    suspend fun sendVehicleData(data: VehicleData)
-    suspend fun sendMicAudio(pcm: ByteArray, sampleRate: Int)
-}
-
-enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, PHONE_CONNECTED, STREAMING }
-
-// Parsed control messages from bridge
-sealed class ControlMessage {
-    data class Hello(val version: Int, val name: String, val capabilities: List<String>) : ControlMessage()
-    data class PhoneConnected(val phoneName: String, val phoneType: String) : ControlMessage()
-    object PhoneDisconnected : ControlMessage()
-    data class AudioStart(val purpose: AudioPurpose, val sampleRate: Int, val channels: Int) : ControlMessage()
-    data class AudioStop(val purpose: AudioPurpose) : ControlMessage()
-    data class NavState(val maneuver: String?, val distanceMeters: Int?, val road: String?) : ControlMessage()
-    data class MediaMetadata(val title: String?, val artist: String?, val album: String?, val durationMs: Long?) : ControlMessage()
-    data class ConfigEcho(val config: Map<String, Any>) : ControlMessage()
-    data class MicStart(val sampleRate: Int) : ControlMessage()
-    object MicStop : ControlMessage()
-    data class Error(val code: Int, val message: String) : ControlMessage()
-    data class Stats(val videoFramesSent: Long, val audioFramesSent: Long, val uptimeSeconds: Long) : ControlMessage()
-    // P1
-    data class PhoneBattery(val level: Int, val timeRemainingSeconds: Int, val critical: Boolean) : ControlMessage()
-    data class VoiceSession(val started: Boolean) : ControlMessage()
-    // P4
-    data class PhoneStatus(val signalStrength: Int?, val calls: List<PhoneCall>) : ControlMessage()
-    data class PhoneCall(val state: String, val durationSeconds: Int, val callerNumber: String?, val callerId: String?)
-}
-```
-
-**Internal:**
-- `TcpControlChannel` — JSON line reader/writer on port 5288
-- `TcpVideoChannel` — binary frame reader on port 5290
-- `TcpAudioChannel` — bidirectional binary frames on port 5289
-- `ConnectionManager` — lifecycle, reconnect with exponential backoff (1s, 2s, 4s... cap 30s)
-- `BridgeDiscovery` — mDNS (`_openautolink._tcp`) + manual IP entry
-
-**Tests:**
-- Unit: JSON serialization/deserialization, frame header parsing, reconnect timing
-- Integration: mock TCP server, full connect/send/receive cycle
+Ports and probe strings shared with the companion live in `OalProtocol`.
 
 ---
 
@@ -82,7 +41,7 @@ interface VideoDecoder {
     fun attach(surface: Surface, width: Int, height: Int)
     fun detach()
     fun onFrame(frame: VideoFrame)  // Called from transport flow collector
-    fun requestKeyframe()           // Tells session to ask bridge for IDR
+    fun requestKeyframe()           // Tells session to ask the phone for an IDR frame
     fun pause()
     fun resume()
 }
@@ -145,7 +104,7 @@ data class AudioStats(val activePurposes: Set<AudioPurpose>, val underruns: Map<
 
 ### 4. Input (`com.openautolink.app.input`)
 
-Touch, GNSS, vehicle data, and IMU sensor forwarding to bridge.
+Touch, GNSS, vehicle data, and IMU sensor forwarding to the phone.
 
 **Public API:**
 ```kotlin
@@ -172,7 +131,7 @@ class ImuForwarder(context: Context, sendMessage: (VehicleData) -> Unit) {
 ```
 
 **Internal:**
-- `TouchScaler` — scales Android screen coordinates to bridge video coordinates
+- `TouchScaler` — scales Android screen coordinates to phone video coordinates
 - `MultiTouchSerializer` — handles POINTER_DOWN/UP for multi-pointer events
 - `GnssProvider` — Android LocationManager → NMEA sentences
 - `VhalMonitor` — VHAL properties via Car API reflection (speed, gear, battery, temp, etc.)
@@ -190,12 +149,12 @@ Compose screens and ViewModels.
 
 **Screens:**
 - `ProjectionScreen` — SurfaceView + touch overlay + connection HUD. The main screen
-- `SettingsScreen` — bridge connection, paired phones, video codec, audio, display mode, custom viewport editor
-- `DiagnosticsScreen` — system info, codecs, network, bridge stats
+- `SettingsScreen` — phone connection (USB or Wireless), video codec, audio, display mode, custom viewport editor
+- `DiagnosticsScreen` — system info, codecs, network, session stats
 
 **ViewModels:**
 - `ProjectionViewModel` — observes session state, video stats, audio stats
-- `SettingsViewModel` — reads/writes DataStore preferences, triggers bridge config updates
+- `SettingsViewModel` — reads/writes DataStore preferences, triggers session reconnects
 - `DiagnosticsViewModel` — collects device capabilities, connection metrics
 
 **Tests:**
@@ -217,7 +176,7 @@ interface NavigationDisplay {
 ```
 
 **Internal:**
-- `ManeuverMapper` — bridge maneuver strings → Android `TurnEvent` types
+- `ManeuverMapper` — AA maneuver strings → Android `TurnEvent` types
 - `ManeuverIconRenderer` — Canvas-based turn arrow rendering
 - `DistanceFormatter` — meters → "0.3 mi" / "500 ft" localized
 - `ClusterService` — AAOS `InstrumentClusterRenderingService` (if OEM allows)
@@ -238,7 +197,7 @@ interface SessionManager {
     val sessionState: StateFlow<SessionState>
 
     fun initialize(surface: Surface, width: Int, height: Int)
-    fun connect(bridgeHost: String)
+    fun start(transport: String)
     fun disconnect()
     fun onPause()
     fun onResume()
@@ -255,7 +214,7 @@ enum class SessionState { IDLE, CONNECTING, BRIDGE_CONNECTED, PHONE_CONNECTED, S
 - Owns reconnect policy and error recovery
 
 **Tests:**
-- Integration: full session with mock TCP bridge, verify state machine transitions
+- Integration: full session with fake native session, verify state machine transitions
 
 ---
 
@@ -269,7 +228,7 @@ enum class SessionState { IDLE, CONNECTING, BRIDGE_CONNECTED, PHONE_CONNECTED, S
            ▼         ▼     ▼         ▼          ▼
       Transport    Video  Audio    Input    Navigation
            │                                    │
-           └──── TCP ◄──── Bridge (SBC) ────────┘
+           └──── aasdk (JNI) ◄── phone (USB or WPP) ┘
                          │
                    ┌─────┴─────┐
                    │ AA (aasdk) │  ── Android phone
@@ -277,7 +236,7 @@ enum class SessionState { IDLE, CONNECTING, BRIDGE_CONNECTED, PHONE_CONNECTED, S
 ```
 
 No island depends on another island directly. All communication flows through Session.
-The bridge handles phone-protocol specifics — the app only sees OAL frames.
+aasdk handles the Android Auto protocol; the app sees decoded control messages, video and audio.
 
 ---
 

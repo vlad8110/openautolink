@@ -43,7 +43,6 @@ class TcpAdvertiser(
         fun onConnecting()
         fun onProxyConnected()
         fun onProxyDisconnected()
-        fun onLaunchTimeout()
     }
 
     companion object {
@@ -81,17 +80,6 @@ class TcpAdvertiser(
         private const val BIND_RETRY_MAX = 10
         /** Delay between bind retries (ms). 10 retries × 300ms = 3s max wait. */
         private const val BIND_RETRY_DELAY_MS = 300L
-
-        /**
-         * Consecutive unexpected bridge breaks before we stop re-inviting AA and just
-         * wait for the car to re-dial. Prevents the ~100ms hot loop observed when the
-         * car leaves the network mid-session.
-         */
-        private const val MAX_BRIDGE_RELAUNCHES = 5
-        /** First backoff step; doubles each attempt (250/500/1000/2000/4000ms). */
-        private const val BRIDGE_RELAUNCH_BASE_MS = 250L
-        /** Ceiling for the bridge-relaunch backoff. */
-        private const val BRIDGE_RELAUNCH_MAX_MS = 4_000L
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -158,12 +146,12 @@ class TcpAdvertiser(
     private var nsdManager: NsdManager? = null
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
     private var aaConnectWatchdog: Job? = null
+    /** Held only while the mDNS registration is active (some OEMs filter multicast when screen off). */
+    private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
 
-    /** Debounce job for re-inviting AA after an unexpected bridge break. */
-    private var bridgeRelaunchJob: Job? = null
-
-    /** Consecutive unexpected bridge breaks; drives the relaunch backoff + cap. */
-    private var bridgeRelaunchAttempts = 0
+    /** Remote address of the last admitted car socket; only it may replace a live bridge or send BYE. */
+    @Volatile
+    private var carPeer: java.net.InetAddress? = null
 
     @Volatile
     private var isRunning = false
@@ -187,11 +175,6 @@ class TcpAdvertiser(
             context = context,
             onSelectedNetworkChanged = { network -> replaceCarFacingListeners(network) },
         ).also { it.start() }
-    }
-
-    /** Supplies the exact network returned by CarWifiManager, or clears that preference. */
-    fun updateCarNetwork(network: Network?) {
-        carNetworkMonitor?.prefer(network)
     }
 
     /**
@@ -517,6 +500,10 @@ class TcpAdvertiser(
                 buf[2] == 'E'.code.toByte() && buf[3] == '!'.code.toByte() &&
                 buf[4] == '\n'.code.toByte()
             if (isBye) {
+                if (socket.inetAddress != carPeer) {
+                    CompanionLog.w(TAG, "Ignoring BYE from $remoteIp: not the current car peer")
+                    return
+                }
                 CompanionLog.i(TAG, "Car at $remoteIp is shutting down — clearing state " +
                         "so the next ignition starts fresh")
                 activeProxy?.onCarShutdown()
@@ -646,16 +633,17 @@ class TcpAdvertiser(
     private fun handleCarConnection(carSocket: Socket) {
       synchronized(proxyOwnershipLock) {
         if (!isRunning) { carSocket.close(); return@synchronized }
+        // A live bridge is only replaced by its own car re-dialling; any other peer is dropped.
+        if (activeProxy?.hasActiveBridge() == true && carSocket.inetAddress != carPeer) {
+            CompanionLog.w(TAG, "Rejected car connection from ${carSocket.inetAddress?.hostAddress}: " +
+                "bridge active for another peer")
+            runCatching { carSocket.close() }
+            return@synchronized
+        }
+        carPeer = carSocket.inetAddress
         publicationRevision++
         reservePublication { stateListener.onConnecting() }
         val proxy = activeProxy
-        // A real car socket just arrived: any pending bridge-break backoff is stale
-        // (it exists only to avoid hot-looping while the car is ABSENT) and the
-        // consecutive-break counter must reset, otherwise a burst of breaks before
-        // the car left would permanently latch the cap for this session.
-        bridgeRelaunchJob?.cancel()
-        bridgeRelaunchJob = null
-        bridgeRelaunchAttempts = 0
         // If a proxy is already listening and AA hasn't connected yet, reuse it:
         // swap in the new car socket so the next AA connection bridges to the
         // freshest car TCP session. This avoids throwing away a proxy whose port
@@ -728,7 +716,6 @@ class TcpAdvertiser(
                     if (!isRunning || activeProxy !== proxy || activeCarSocket !== carSocket) false
                     else {
                         activeProxyBridge = bridge
-                        bridgeRelaunchAttempts = 0
                         aaConnectWatchdog?.cancel()
                         aaConnectWatchdog = null
                         aaLaunchAttempts = 0
@@ -753,7 +740,6 @@ class TcpAdvertiser(
                             aaConnectWatchdog = null
                             // The consumed stream is closed by AaProxy. Wait for a fresh car
                             // dial rather than inviting AA onto a known-dead stream.
-                            scheduleBridgeRelaunch(null)
                         }
                         reservePublication { stateListener.onProxyDisconnected() }
                         true
@@ -785,61 +771,6 @@ class TcpAdvertiser(
                 }
             }
             drainPublications()
-        }
-    }
-
-    /**
-     * Debounced, capped re-invite of Android Auto after an unexpected bridge break.
-     *
-     * Replaces the previous unconditional `fireAaLaunchIntent()` call, which had no
-     * liveness check and no delay. When the car left the network mid-session, AA would
-     * reconnect to the proxy within ~100ms, bridge onto the already-closed car socket,
-     * fail with "Socket is closed", and trigger another relaunch — a hot loop measured
-     * at 622 AA connects / 617 failures from only 4 real car sockets during a 21s
-     * hotspot-off test (peak 339 in one minute).
-     *
-     * @param localPort proxy port to re-invite AA on, or null when the car is gone and
-     *   we should simply stand down and wait for it to re-dial.
-     */
-    private fun scheduleBridgeRelaunch(localPort: Int?) {
-        bridgeRelaunchJob?.cancel()
-
-        if (localPort == null) {
-            // Car is gone — stand down. handleCarConnection() restarts the pipeline
-            // cleanly when the car re-dials, so there is nothing to retry here.
-            bridgeRelaunchAttempts = 0
-            bridgeRelaunchJob = null
-            return
-        }
-
-        bridgeRelaunchAttempts++
-        if (bridgeRelaunchAttempts > MAX_BRIDGE_RELAUNCHES) {
-            CompanionLog.w(TAG,
-                "Bridge broke $MAX_BRIDGE_RELAUNCHES times in a row — standing down; " +
-                    "waiting for the car to reconnect")
-            bridgeRelaunchAttempts = 0
-            bridgeRelaunchJob = null
-            return
-        }
-
-        // Exponential backoff: 250ms, 500ms, 1s, 2s, 4s (capped).
-        val delayMs = (BRIDGE_RELAUNCH_BASE_MS shl (bridgeRelaunchAttempts - 1))
-            .coerceAtMost(BRIDGE_RELAUNCH_MAX_MS)
-
-        bridgeRelaunchJob = scope.launch {
-            delay(delayMs)
-            if (!isRunning) return@launch
-            // Re-check: the car may have re-dialled during the backoff, in which case
-            // handleCarConnection() has already rebuilt the pipeline and this stale
-            // relaunch would only cause churn.
-            if (activeCarSocket != null) {
-                CompanionLog.i(TAG, "Car reconnected during backoff — skipping stale AA relaunch")
-                bridgeRelaunchAttempts = 0
-                return@launch
-            }
-            CompanionLog.i(TAG,
-                "Re-inviting AA after bridge break (attempt $bridgeRelaunchAttempts, ${delayMs}ms backoff)")
-            fireAaLaunchIntent(localPort)
         }
     }
 
@@ -963,9 +894,6 @@ class TcpAdvertiser(
         }
         aaConnectWatchdog?.cancel()
         aaConnectWatchdog = null
-        bridgeRelaunchJob?.cancel()
-        bridgeRelaunchJob = null
-        bridgeRelaunchAttempts = 0
         activeProxy?.stop()
         activeProxy = null
         activeCarSocket?.let { runCatching { it.close() } }
@@ -1020,6 +948,11 @@ class TcpAdvertiser(
                 }
             }
             nsdManager?.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, nsdRegistrationListener)
+            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            multicastLock = wm?.createMulticastLock("OalCompanion")?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
         } catch (e: Exception) {
             CompanionLog.w(TAG, "mDNS registration failed: ${e.message}")
         }
@@ -1030,5 +963,7 @@ class TcpAdvertiser(
             nsdRegistrationListener?.let { nsdManager?.unregisterService(it) }
         } catch (_: Exception) {}
         nsdRegistrationListener = null
+        multicastLock?.takeIf { it.isHeld }?.release()
+        multicastLock = null
     }
 }

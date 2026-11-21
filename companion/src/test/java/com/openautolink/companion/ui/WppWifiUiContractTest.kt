@@ -27,7 +27,7 @@ class WppWifiUiContractTest {
     @Test
     fun sendIsGuardedBeforeLaunchAndAlwaysReleasesBusyState() {
         val section = screenSource().substringAfter("private fun WppWifiSendSection(")
-            .substringBefore("private fun CarWifiAddDialog(")
+            .substringBefore("// ── Helpers")
         assertTrue(section.contains("var isSending by remember { mutableStateOf(false) }"))
         assertTrue(section.contains("enabled = selectedBtMacs.isNotEmpty() && !isSending"))
         val click = section.substringAfter(".clickable(enabled = !isSending) {")

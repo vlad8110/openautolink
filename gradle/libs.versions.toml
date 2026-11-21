@@ -13,12 +13,9 @@ car-app = "1.7.0"
 media = "1.7.1"
 protobuf = "4.29.3"
 protobuf-plugin = "0.9.4"
-conscrypt = "2.5.3"
-nearby = "19.3.0"
 
 # Testing
 junit = "4.13.2"
-turbine = "1.2.0"
 kotlinx-coroutines-test = "1.9.0"
 mockk = "1.13.13"
 robolectric = "4.14.1"
@@ -47,12 +44,9 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
-conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
-nearby-connections = { module = "com.google.android.gms:play-services-nearby", version.ref = "nearby" }
 
 # Testing
 junit = { module = "junit:junit", version.ref = "junit" }
-turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines-test" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }

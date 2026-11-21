@@ -63,10 +63,9 @@ class VehicleEnergyForecastWiringContractTest {
     }
 
     @Test
-    fun `both cluster paths publish Maps arrival SOC through TravelEstimate trip text`() {
+    fun `cluster path publishes Maps arrival SOC through TravelEstimate trip text`() {
         for (path in listOf(
             "app/src/main/java/com/openautolink/app/cluster/ClusterMainSession.kt",
-            "app/src/main/java/com/openautolink/app/cluster/OalClusterSession.kt",
         )) {
             val source = projectFile(path)
             assertTrue("$path must consume the shared forecast", source.contains("ClusterNavigationState.vehicleEnergyForecast"))

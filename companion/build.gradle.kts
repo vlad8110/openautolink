@@ -71,8 +71,8 @@ android {
 dependencies {
     // Core
     implementation(libs.core.ktx)
-    implementation(libs.lifecycle.runtime.ktx)
-    implementation(libs.lifecycle.viewmodel.compose)
+    // No direct import: Compose UI needs it transitively, and pinning it keeps the whole
+    // lifecycle group aligned at the version recorded in verification-metadata.xml.
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.activity.compose)
 
@@ -80,10 +80,8 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
-    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
-    debugImplementation(libs.compose.ui.tooling)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)

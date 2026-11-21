@@ -8,14 +8,10 @@ import org.junit.Test
 class WppWakeReconnectPolicyTest {
 
     @Test
-    fun `idle WPP wake starts without default phone or discovery`() {
+    fun `idle WPP wake starts`() {
         assertTrue(
             WppWakeReconnectPolicy.shouldKickWake(
                 wppSelected = true,
-                wirelessDiscoveryEnabled = false,
-                alwaysAskPhone = true,
-                defaultPhonePresent = false,
-                resolvedPhonePresent = false,
                 connectInFlight = false,
                 sessionIdle = true,
             ),
@@ -27,10 +23,6 @@ class WppWakeReconnectPolicyTest {
         assertFalse(
             WppWakeReconnectPolicy.shouldKickWake(
                 wppSelected = true,
-                wirelessDiscoveryEnabled = false,
-                alwaysAskPhone = false,
-                defaultPhonePresent = false,
-                resolvedPhonePresent = false,
                 connectInFlight = true,
                 sessionIdle = true,
             ),
@@ -38,10 +30,6 @@ class WppWakeReconnectPolicyTest {
         assertFalse(
             WppWakeReconnectPolicy.shouldKickWake(
                 wppSelected = true,
-                wirelessDiscoveryEnabled = false,
-                alwaysAskPhone = false,
-                defaultPhonePresent = false,
-                resolvedPhonePresent = false,
                 connectInFlight = false,
                 sessionIdle = false,
             ),
@@ -53,10 +41,6 @@ class WppWakeReconnectPolicyTest {
         assertFalse(
             WppWakeReconnectPolicy.shouldKickWake(
                 wppSelected = true,
-                wirelessDiscoveryEnabled = false,
-                alwaysAskPhone = false,
-                defaultPhonePresent = false,
-                resolvedPhonePresent = false,
                 connectInFlight = false,
                 sessionIdle = true,
                 currentWppOwnerPresent = true,
@@ -65,9 +49,6 @@ class WppWakeReconnectPolicyTest {
         assertFalse(
             WppWakeReconnectPolicy.shouldKickIgnition(
                 wppSelected = true,
-                wirelessDiscoveryEnabled = false,
-                alwaysAskPhone = false,
-                defaultPhonePresent = false,
                 connectInFlight = false,
                 sessionIdle = true,
                 currentWppOwnerPresent = true,
@@ -76,59 +57,19 @@ class WppWakeReconnectPolicyTest {
     }
 
     @Test
-    fun `legacy hotspot wake still requires configured resolved default`() {
-        assertFalse(
-            WppWakeReconnectPolicy.shouldKickWake(
-                wppSelected = false,
-                wirelessDiscoveryEnabled = true,
-                alwaysAskPhone = false,
-                defaultPhonePresent = true,
-                resolvedPhonePresent = false,
-                connectInFlight = false,
-                sessionIdle = true,
-            ),
-        )
-        assertTrue(
-            WppWakeReconnectPolicy.shouldKickWake(
-                wppSelected = false,
-                wirelessDiscoveryEnabled = true,
-                alwaysAskPhone = false,
-                defaultPhonePresent = true,
-                resolvedPhonePresent = true,
-                connectInFlight = false,
-                sessionIdle = true,
-            ),
-        )
-    }
-
-    @Test
-    fun `idle WPP ignition starts without legacy phone selection state`() {
+    fun `idle WPP ignition starts`() {
         assertTrue(
             WppWakeReconnectPolicy.shouldKickIgnition(
                 wppSelected = true,
-                wirelessDiscoveryEnabled = false,
-                alwaysAskPhone = true,
-                defaultPhonePresent = false,
                 connectInFlight = false,
                 sessionIdle = true,
             ),
         )
-    }
-
-    @Test
-    fun `WPP owner rearm bypasses legacy discovery cooldown`() {
-        assertTrue(
-            WppWakeReconnectPolicy.cooldownAllows(
-                wppSelected = true,
-                elapsedSinceAttemptMs = 0L,
-                minimumGapMs = 10_000L,
-            ),
-        )
         assertFalse(
-            WppWakeReconnectPolicy.cooldownAllows(
+            WppWakeReconnectPolicy.shouldKickIgnition(
                 wppSelected = false,
-                elapsedSinceAttemptMs = 0L,
-                minimumGapMs = 10_000L,
+                connectInFlight = false,
+                sessionIdle = true,
             ),
         )
     }

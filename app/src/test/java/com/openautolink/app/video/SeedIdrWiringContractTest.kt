@@ -35,17 +35,17 @@ class SeedIdrWiringContractTest {
 
     @Test
     fun `saved thresholds reach every decoder creation path`() {
+        val preferences = source("app/src/main/java/com/openautolink/app/data/AppPreferences.kt")
         val projectionVm = source("app/src/main/java/com/openautolink/app/ui/projection/ProjectionViewModel.kt")
         val settingsVm = source("app/src/main/java/com/openautolink/app/ui/settings/SettingsViewModel.kt")
         val settingsReceiver = source("app/src/main/java/com/openautolink/app/diagnostics/SettingsReceiver.kt")
         val manager = source("app/src/main/java/com/openautolink/app/session/SessionManager.kt")
         val decoder = source("app/src/main/java/com/openautolink/app/video/MediaCodecDecoder.kt")
 
-        assertTrue(projectionVm.contains("val seedIdrThresholds = preferences.seedIdrThresholds.first()"))
-        assertTrue(projectionVm.contains("seedIdrThresholds = seedIdrThresholds"))
-        assertTrue(settingsVm.contains("val seedIdrThresholds = preferences.seedIdrThresholds.first()"))
-        assertTrue(settingsVm.contains("seedIdrThresholds = seedIdrThresholds"))
-        assertTrue(settingsReceiver.contains("seedIdrThresholds = prefs.seedIdrThresholds.first()"))
+        assertTrue(preferences.contains("seedIdrThresholds = seedIdrThresholds.first()"))
+        assertTrue(projectionVm.contains("seedIdrThresholds = c.seedIdrThresholds"))
+        assertTrue(settingsVm.contains("seedIdrThresholds = c.seedIdrThresholds"))
+        assertTrue(settingsReceiver.contains("seedIdrThresholds = c.seedIdrThresholds"))
 
         assertTrue(manager.contains("private var lastSeedIdrThresholds = SeedIdrThresholds()"))
         assertTrue(manager.contains("seedIdrThresholds = lastSeedIdrThresholds"))

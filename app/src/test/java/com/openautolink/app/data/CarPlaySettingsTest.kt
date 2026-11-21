@@ -113,22 +113,24 @@ class CarPlaySettingsTest {
             stringPreferencesKey("carplay_settings_v1") to """{"enabled":true,"resolution":"8k","fps":120,"phoneAddress":""}"""
         ) }
         val preferences = preferences(store)
-        assertEquals("720p", preferences.carPlayResolution.first())
-        assertEquals(30, preferences.carPlayFps.first())
-        assertEquals("", preferences.carPlayPhoneAddress.first())
+        val invalid = preferences.carPlaySettings.first()
+        assertEquals("720p", invalid.resolution)
+        assertEquals(30, invalid.fps)
+        assertEquals("", invalid.phoneAddress)
         assertFalse(CarPlaySettings.decode("not-json").enabled)
         preferences.setCarPlaySettings(CarPlaySettings(enabled = true, peerAddress = "192.0.2.21",
             phoneAddress = "10:20:30:40:50:60", sharedWifiOverride = true, interfaceName = "wlan0",
             ssid = " LAN ", receiverAddress = "20:30:40:50:60:70"))
-        assertTrue(preferences.carPlayEnabled.first())
-        assertEquals("192.0.2.21", preferences.carPlayPeerAddress.first())
-        assertEquals("wlan0", preferences.carPlayInterface.first())
-        assertTrue(preferences.carPlaySharedWifiOverride.first())
-        assertEquals(" LAN ", preferences.carPlaySsid.first())
-        assertEquals("20:30:40:50:60:70", preferences.carPlayReceiverAddress.first())
+        val saved = preferences.carPlaySettings.first()
+        assertTrue(saved.enabled)
+        assertEquals("192.0.2.21", saved.peerAddress)
+        assertEquals("wlan0", saved.interfaceName)
+        assertTrue(saved.sharedWifiOverride)
+        assertEquals(" LAN ", saved.ssid)
+        assertEquals("20:30:40:50:60:70", saved.receiverAddress)
         preferences.setCarPlayEnabled(false)
         assertFalse(preferences.carPlayEnabled.first())
-        assertEquals("192.0.2.21", preferences.carPlayPeerAddress.first())
+        assertEquals("192.0.2.21", preferences.carPlaySettings.first().peerAddress)
     }
 
     @Test fun explicitPhoneAndReadinessNeverInferTrustFromFriendlyName() {

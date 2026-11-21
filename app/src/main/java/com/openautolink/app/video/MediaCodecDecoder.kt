@@ -239,10 +239,6 @@ class MediaCodecDecoder(
             else idrIntervals.sorted()[idrIntervals.size / 2]
         }
 
-    /** How long the picture has been frozen waiting for a fresh IDR, or null. */
-    val awaitingIdrForMs: Long?
-        get() = if (awaitingFreshIdr && awaitingFreshIdrSince > 0)
-            System.currentTimeMillis() - awaitingFreshIdrSince else null
     // Skip first few frames after codec init to avoid green hue from resolution
     // transition. When codec is configured at 1920x1080 but video is 2560x1440,
     // the first frames decode with wrong color plane alignment until the codec

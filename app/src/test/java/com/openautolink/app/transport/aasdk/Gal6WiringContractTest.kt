@@ -31,8 +31,9 @@ class Gal6WiringContractTest {
         assertTrue(settingsVm.contains("val galVersion: StateFlow<String>"))
         assertTrue(settingsUi.contains("testTag(\"galVersion_"))
         assertTrue(settingsUi.contains("GalProtocolPolicy.supportedVersions.forEach"))
-        assertTrue(projectionVm.contains("preferences.galVersion.first()"))
-        assertTrue(settingsReceiver.contains("galVersion = prefs.galVersion.first()"))
+        assertTrue(preferences.contains("galVersion = galVersion.first()"))
+        assertTrue(projectionVm.contains("galVersion = c.galVersion"))
+        assertTrue(settingsReceiver.contains("galVersion = c.galVersion"))
         assertTrue(sessionManager.contains("galVersion: String = AppPreferences.DEFAULT_GAL_VERSION"))
         assertTrue(sessionManager.contains("galVersion = galVersion"))
     }

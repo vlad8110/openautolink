@@ -18,7 +18,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
 
-/** Exercises the actual private Trip builders and non-GM RoutingInfo consumer. */
+/** Exercises the actual private Trip builder. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [32])
 @ConscryptMode(ConscryptMode.Mode.OFF)
@@ -33,15 +33,11 @@ class DisplayDistanceConsumerTest {
             displayDistance = value, displayDistanceUnit = unit)
 
     private fun trips(state: ManeuverState): List<Trip> = listOf<Session>(
-        spyk(ClusterMainSession()), spyk(OalClusterSession())
+        spyk(ClusterMainSession())
     ).map { session ->
         every { session.carContext } returns context
         session.javaClass.getDeclaredMethod("buildTrip", ManeuverState::class.java)
             .apply { isAccessible = true }.invoke(session, state) as Trip
-    }
-    private fun routing(state: ManeuverState): RoutingInfo? = OalClusterScreen(context).let {
-        it.updateState(state)
-        (it.onGetTemplate() as NavigationTemplate).navigationInfo as RoutingInfo?
     }
     private fun assertDistance(expected: Double?, unit: Int?, state: ManeuverState) {
         for (trip in trips(state)) {
@@ -54,12 +50,6 @@ class DisplayDistanceConsumerTest {
             }
             assertNull("no sourced time means no fabricated arrival-now", estimate.arrivalTimeAtDestination)
             assertEquals(TravelEstimate.REMAINING_TIME_UNKNOWN, estimate.remainingTimeSeconds)
-        }
-        val info = routing(state)
-        if (expected == null) assertNull(info) else {
-            assertNotNull("display-only distance must reach RoutingInfo", info)
-            assertEquals(expected, info!!.currentDistance!!.displayDistance, 0.0)
-            assertEquals(unit, info.currentDistance!!.displayUnit)
         }
     }
     @Test fun displayOnlyPositiveDecimalSurvivesBothTripsAndRouting() {

@@ -61,7 +61,6 @@ data class UsbDeviceCandidate(
  *   4. Opens bulk endpoints and creates AasdkTransportPipe
  *   5. Delivers the pipe to the session via [onTransportReady]
  *
- * Mirrors the lifecycle pattern of TcpConnector.
  */
 class UsbConnectionManager(
     private val context: Context,

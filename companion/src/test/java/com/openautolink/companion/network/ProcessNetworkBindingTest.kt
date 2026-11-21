@@ -145,19 +145,6 @@ class ProcessNetworkBindingTest {
 class CarNetworkBindingIntegrationTest {
 
     @Test
-    fun `service forwards exact companion network without restarting advertiser`() {
-        val source = projectFile(
-            "companion/src/main/java/com/openautolink/companion/service/CompanionService.kt",
-        ).readText()
-        val carWifiFunction = source.substringAfter("private fun startCarWifiIfConfigured()")
-            .substringBefore("fun restartCarWifi()")
-
-        assertTrue(carWifiFunction.contains("mgr.carNetwork.collect"))
-        assertTrue(carWifiFunction.contains("tcpAdvertiser?.updateCarNetwork(network)"))
-        assertFalse(carWifiFunction.contains("tcpAdvertiser?.stop()"))
-    }
-
-    @Test
     fun `listener rebind leaves proxy bridge and recovery ownership untouched`() {
         val source = projectFile(
             "companion/src/main/java/com/openautolink/companion/service/TcpAdvertiser.kt",
@@ -218,19 +205,6 @@ class CarNetworkBindingIntegrationTest {
                 .substringBefore("val remoteIp")
                 .contains("listenerGenerations.owns(ticket)"),
         )
-    }
-
-    @Test
-    fun `stale CarWifiManager callbacks cannot clear a newer exact network`() {
-        val source = projectFile(
-            "companion/src/main/java/com/openautolink/companion/wifi/CarWifiManager.kt",
-        ).readText()
-        val callback = source.substringAfter("val callback = object : ConnectivityManager.NetworkCallback()")
-            .substringBefore("currentCallback = callback")
-
-        assertTrue(source.contains("val generation = requestGeneration"))
-        assertEquals(3, callback.windowed("if (!ownsRequest(generation)) return".length)
-            .count { it == "if (!ownsRequest(generation)) return" })
     }
 
     @Test

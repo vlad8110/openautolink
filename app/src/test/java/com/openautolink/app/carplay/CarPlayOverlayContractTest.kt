@@ -33,10 +33,10 @@ class CarPlayOverlayContractTest {
         assertTrue(shared.contains("OverlayControl(\"Settings\""))
         assertTrue(shared.contains("OverlayControl(\"Stats for nerds\""))
         assertTrue(shared.contains("OverlayControl(\"Reconnect\""))
-        assertTrue("Settings precedes optional actions", shared.indexOf("OverlayControl(\"Settings\"") < shared.indexOf("if (onSwitchPhone != null)"))
+        assertTrue("Settings precedes optional actions", shared.indexOf("OverlayControl(\"Settings\"") < shared.indexOf("OverlayControl(\"Stats for nerds\""))
         assertEquals("one movable logo, no individual floating controls", 1, Regex("DraggableOverlayButton\\(").findAll(shared).count())
         assertFalse(shared.contains("overlayRecoveryButton"))
-        assertTrue("No unsupported phone chooser by default", shared.contains("onSwitchPhone: (() -> Unit)? = null"))
+        assertFalse("No phone chooser", shared.contains("onSwitchPhone"))
         assertTrue("No AA ignition simulation by default", shared.contains("onSimulateIgnition: (() -> Unit)? = null"))
     }
 }

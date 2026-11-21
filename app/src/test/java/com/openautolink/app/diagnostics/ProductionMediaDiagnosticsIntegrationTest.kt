@@ -59,7 +59,7 @@ class ProductionMediaDiagnosticsIntegrationTest {
         val app = RuntimeEnvironment.getApplication()
         MediaDiagnosticHooks.install(app)
         assertTrue(MediaDiagnosticStore.flushTerminals())
-        DiagnosticLog.fileLogWriter = null; DiagnosticLog.instance = null
+        DiagnosticLog.fileLogWriter = null
         val dir = File(app.getExternalFilesDir(null), "openautolink/logs").apply { mkdirs() }
         dir.listFiles().orEmpty().forEach { it.delete() }
         val boundary = object : android.content.ContextWrapper(app) {
@@ -133,7 +133,6 @@ class ProductionMediaDiagnosticsIntegrationTest {
     @Test fun productionPublicationAndDisconnectSurviveLoggingOffFailedUploadInActualZip() {
         val app = RuntimeEnvironment.getApplication()
         DiagnosticLog.fileLogWriter = null
-        DiagnosticLog.instance = null
         val dir = File(app.getExternalFilesDir(null), "openautolink/logs").apply { mkdirs() }
         dir.listFiles().orEmpty().forEach { it.delete() }
         val prefs = mockk<com.openautolink.app.data.AppPreferences>()

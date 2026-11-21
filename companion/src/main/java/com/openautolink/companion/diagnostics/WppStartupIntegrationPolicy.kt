@@ -11,7 +11,6 @@ enum class WppNetworkObservationMode {
 }
 
 enum class WppAssociationOwner(val logValue: String) {
-    COMPANION_ASSIST("companion_assist"),
     WPP("wpp"),
 }
 

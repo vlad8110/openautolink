@@ -1,10 +1,8 @@
 package com.openautolink.app.transport.hotspot
 
-import android.content.Context
-import android.net.nsd.NsdManager
-import android.net.nsd.NsdServiceInfo
-import android.net.wifi.WifiManager
 import com.openautolink.app.diagnostics.OalLog
+import com.openautolink.app.transport.HostUsability
+import com.openautolink.app.transport.OalProtocol
 import com.openautolink.app.transport.WppInterfacePolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,61 +14,33 @@ import java.net.InetSocketAddress
 import java.net.Socket
 
 /**
- * TCP client that connects to the companion app's TCP server on the phone.
+ * TCP client that dials the companion app's proxy on the phone.
  *
- * Discovery strategy (tried in order):
- * 1. mDNS/NSD: discovers `_openautolink._tcp` service (works on any shared network)
- * 2. WiFi gateway IP: connects to DHCP gateway on [COMPANION_PORT] (hotspot mode)
- *
- * On phone hotspot, gateway = phone, so strategy 2 works immediately.
- * On shared WiFi (home/office), strategy 1 finds the phone via mDNS.
+ * Wireless (WPP) is the only network transport: the Bluetooth handshake locates
+ * the companion and hands its address in as [manualIp]. Without an address there
+ * is nothing to dial.
  */
 class TcpConnector(
-    private val context: Context,
     private val scope: CoroutineScope,
     private val onSocketReady: (Socket) -> Unit,
-    /**
-     * Optional: called once after a full attempt cycle fails to connect (one
-     * tryConnect for manual IP, or all of mDNS+gateway). Used to drive UI
-     * escalation (e.g. open the phone picker after N failures) without
-     * relying on session-level retries — when the phone is unreachable at
-     * the TCP layer we never get an onSessionStopped to count from.
-     */
+    /** Called after each failed dial, so the session can count reconnect attempts. */
     private val onConnectFailure: (() -> Unit)? = null,
     private val admissionCheck: () -> Boolean = { true },
 ) {
     companion object {
         private const val TAG = "OAL-TcpConn"
-        const val COMPANION_PORT = 5277
-        const val NSD_SERVICE_TYPE = "_openautolink._tcp"
+        const val COMPANION_PORT = OalProtocol.AA_PORT
         private const val CONNECT_TIMEOUT_MS = 5000
         private const val RETRY_DELAY_MS = 3000L
-
-        /**
-         * Gateway dials before concluding it is a router, not a phone hotspot.
-         *
-         * Ten at a 3s cadence is ~30s — long enough for a hotspot still coming
-         * up, short enough not to spend 12 minutes dialling a home router, which
-         * is what happened when the head unit sat on home WiFi in the driveway.
-         */
-        private const val MAX_GATEWAY_ATTEMPTS = 10
     }
-
-    /**
-     * Consecutive failed gateway dials. Reset whenever the network changes or a
-     * dial succeeds, so moving onto a real phone hotspot re-enables the path.
-     */
-    private var gatewayFailures = 0
 
     /** When set, bind outbound sockets to this selected local IPv4. */
     var sourceIpv4: String? = null
 
-    /** When set, connects only to this IP (skips mDNS and gateway discovery). */
+    /** The companion address to dial: "host" or "host:port". */
     var manualIp: String? = null
 
     private var connectJob: Job? = null
-    private var nsdManager: NsdManager? = null
-    private var discoveryListener: NsdManager.DiscoveryListener? = null
 
     @Volatile
     private var isRunning = false
@@ -84,130 +54,51 @@ class TcpConnector(
      */
     val isActive: Boolean get() = isRunning
 
-    @Volatile
-    private var nsdFoundHost: String? = null
-
-    @Volatile
-    private var nsdFoundPort: Int = 0
-
     fun start() {
         if (isRunning || !admissionCheck()) return
-        isRunning = true
-        // Fresh budget per start: start() follows a network or transport change,
-        // which is exactly when a gateway that never answered might now be a
-        // phone hotspot that does.
-        gatewayFailures = 0
-        OalLog.i(TAG, "Starting TCP connector (port $COMPANION_PORT)")
-
-        // Manual IP may be either "host" or "host:port". If a port is given it
-        // overrides COMPANION_PORT — used by the debug discovery-injection
-        // path (DEBUG_INJECT_PHONE), and harmless when omitted in production
-        // since every companion listens on the canonical port.
+        // "host" or "host:port". A port overrides COMPANION_PORT — used by the
+        // debug discovery-injection path (DEBUG_INJECT_PHONE).
         val raw = manualIp?.takeIf { it.isNotBlank() }
-        val manualHost: String?
-        val manualPort: Int
-        if (raw != null) {
-            val colonIdx = raw.lastIndexOf(':')
-            val parsedPort = if (colonIdx > 0) raw.substring(colonIdx + 1).toIntOrNull() else null
-            if (parsedPort != null && parsedPort in 1..65535 && !raw.contains(']')) {
-                manualHost = raw.substring(0, colonIdx)
-                manualPort = parsedPort
-            } else {
-                manualHost = raw
-                manualPort = COMPANION_PORT
-            }
-        } else {
-            manualHost = null
-            manualPort = COMPANION_PORT
-            startNsdDiscovery()
+        if (raw == null) {
+            OalLog.w(TAG, "No companion address to dial — waiting for the Bluetooth handshake")
+            return
         }
-
-        // Guard (issue #48): a manual host that is an IPv6 literal is unusable on
-        // OAL's IPv4-only local link. If one is somehow handed in, do NOT pin the
-        // direct-dial branch to it (which would skip the gateway/mDNS fallback and
-        // retry a dead address forever). Drop to discovery instead so the IPv4
-        // path can recover.
-        val effectiveManualHost: String? =
-            if (manualHost != null && com.openautolink.app.transport.HostUsability.isUnusable(manualHost)) {
-                OalLog.w(TAG, "Manual host $manualHost is IPv6/unusable — ignoring, falling back to discovery")
-                if (discoveryListener == null) startNsdDiscovery()
-                null
-            } else {
-                if (manualHost != null) OalLog.i(TAG, "Manual IP mode: $manualHost:$manualPort")
-                manualHost
-            }
+        val colonIdx = raw.lastIndexOf(':')
+        val parsedPort = if (colonIdx > 0) raw.substring(colonIdx + 1).toIntOrNull() else null
+        val (host, port) = if (parsedPort != null && parsedPort in 1..65535 && !raw.contains(']')) {
+            raw.substring(0, colonIdx) to parsedPort
+        } else {
+            raw to COMPANION_PORT
+        }
+        // Issue #48: an IPv6 literal is unusable on OAL's IPv4-only local link.
+        if (HostUsability.isUnusable(host)) {
+            OalLog.w(TAG, "Companion host $host is IPv6/unusable — not dialling it")
+            return
+        }
+        isRunning = true
+        OalLog.i(TAG, "Dialling companion at $host:$port")
 
         connectJob = scope.launch(Dispatchers.IO) {
             while (isActive && isRunning && admissionCheck()) {
-                // Manual IP — skip all discovery, connect directly
-                if (effectiveManualHost != null) {
-                    if (tryConnect(effectiveManualHost, manualPort, "manual")) return@launch
-                    onConnectFailure?.invoke()
-                    delay(RETRY_DELAY_MS)
-                    continue
-                }
-
-                // Try mDNS-discovered host first
-                val nsdHost = nsdFoundHost
-                var anyTried = false
-                if (nsdHost != null && nsdFoundPort > 0) {
-                    anyTried = true
-                    if (tryConnect(nsdHost, nsdFoundPort, "mDNS")) return@launch
-                }
-
-                // Fall back to the gateway, which IS the phone when the head unit
-                // is on a phone hotspot. On any other network it is a router that
-                // will never answer, so stop after a bounded number of tries
-                // rather than dialling it forever.
-                //
-                // Measured: 240 attempts at 192.168.0.1 over 12 minutes while the
-                // head unit sat on home WiFi in the driveway. Each one is a
-                // pointless connect with a real timeout, and it buries anything
-                // useful in the log.
-                val gatewayIp = getGatewayIp()
-                if (gatewayIp != null && gatewayFailures < MAX_GATEWAY_ATTEMPTS) {
-                    anyTried = true
-                    if (tryConnect(gatewayIp, COMPANION_PORT, "gateway")) {
-                        gatewayFailures = 0
-                        return@launch
-                    }
-                    gatewayFailures++
-                    if (gatewayFailures == MAX_GATEWAY_ATTEMPTS) {
-                        OalLog.i(TAG, "Gateway $gatewayIp has not answered on " +
-                                "$COMPANION_PORT after $gatewayFailures tries — it is " +
-                                "probably a router, not a phone hotspot. Relying on " +
-                                "mDNS and discovery instead.")
-                    }
-                } else if (gatewayIp == null) {
-                    OalLog.d(TAG, "No WiFi gateway — waiting for mDNS or network...")
-                }
-
-                if (anyTried) onConnectFailure?.invoke()
+                if (tryConnect(host, port)) return@launch
+                onConnectFailure?.invoke()
                 delay(RETRY_DELAY_MS)
             }
         }
     }
 
-    private fun tryConnect(host: String, port: Int, source: String): Boolean {
+    private fun tryConnect(host: String, port: Int): Boolean {
         if (!isRunning || !admissionCheck()) return false
-        // Issue #48: never attempt an IPv6 literal — the companion serves IPv4
-        // only on the local link, and on a hotspot a global IPv6 (2607:…) isn't
-        // bridged. Reject here so every caller (manual / mDNS / gateway) is
-        // covered by one guard and we move on to the next IPv4 candidate.
-        if (com.openautolink.app.transport.HostUsability.isUnusable(host)) {
-            OalLog.d(TAG, "Skipping unusable (IPv6) host from $source: $host")
-            return false
-        }
         val sourceIpv4 = sourceIpv4
         if (sourceIpv4 != null &&
             !WppInterfacePolicy.isPeerOnSelectedSubnet(sourceIpv4, host)
         ) {
-            OalLog.i(TAG, "Skipping $host from $source — outside selected WPP source subnet $sourceIpv4")
+            OalLog.i(TAG, "Skipping $host — outside selected WPP source subnet $sourceIpv4")
             return false
         }
-        OalLog.i(TAG, "Connecting to $host:$port ($source)")
+        OalLog.i(TAG, "Connecting to $host:$port")
+        val socket = Socket()
         return try {
-            val socket = Socket()
             if (sourceIpv4 != null) {
                 socket.bind(InetSocketAddress(sourceIpv4, 0))
                 OalLog.i(TAG, "Binding TCP connector to selected WPP source $sourceIpv4")
@@ -233,9 +124,9 @@ class TcpConnector(
                 OalLog.d(TAG, "TCP keepalive tuning unavailable: ${e.message}")
             }
             if (sourceIpv4 != null) {
-                OalLog.i(TAG, "Connected to companion at $host:$port from $sourceIpv4 ($source)")
+                OalLog.i(TAG, "Connected to companion at $host:$port from $sourceIpv4")
             } else {
-                OalLog.i(TAG, "Connected to companion at $host:$port ($source)")
+                OalLog.i(TAG, "Connected to companion at $host:$port")
             }
             if (!admissionCheck()) { runCatching { socket.close() }; return false }
             // A successful dial is the strongest evidence of where the companion
@@ -246,84 +137,13 @@ class TcpConnector(
             com.openautolink.app.transport.bluetooth.AaWirelessBtControl
                 .lastKnownPhoneIp = host
             isRunning = false
-            stopNsdDiscovery()
             onSocketReady(socket)
             true
         } catch (e: Exception) {
-            OalLog.d(TAG, "Connection to $host:$port ($source) failed: ${e.message}")
+            OalLog.d(TAG, "Connection to $host:$port failed: ${e.message}")
+            runCatching { socket.close() }
             false
         }
-    }
-
-    private fun startNsdDiscovery() {
-        if (!isRunning || !admissionCheck()) return
-        try {
-            nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
-            discoveryListener = object : NsdManager.DiscoveryListener {
-                override fun onDiscoveryStarted(serviceType: String) {
-                    OalLog.i(TAG, "mDNS discovery started for $serviceType")
-                }
-
-                override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                    if (!isRunning || !admissionCheck()) return
-                    OalLog.i(TAG, "mDNS service found: ${serviceInfo.serviceName}")
-                    nsdManager?.resolveService(serviceInfo, object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(si: NsdServiceInfo, errorCode: Int) {
-                            OalLog.w(TAG, "mDNS resolve failed: error $errorCode")
-                        }
-
-                        override fun onServiceResolved(si: NsdServiceInfo) {
-                            if (!isRunning || !admissionCheck()) return
-                            val rawHost = si.host
-                            // IPv6 link-local addresses (fe80::/10) need a
-                            // scope ID (e.g. %wlan0) to connect, which NSD
-                            // doesn't surface — connect() returns EINVAL.
-                            // Skip them; mDNS will (hopefully) deliver the
-                            // IPv4 address on a separate emit.
-                            if (rawHost is java.net.Inet6Address && rawHost.isLinkLocalAddress) {
-                                OalLog.d(TAG, "Ignoring IPv6 link-local from mDNS: ${rawHost.hostAddress}")
-                                return
-                            }
-                            val host = rawHost?.hostAddress
-                            val port = si.port
-                            OalLog.i(TAG, "mDNS resolved: $host:$port")
-                            if (host != null && port > 0) {
-                                nsdFoundHost = host
-                                nsdFoundPort = port
-                            }
-                        }
-                    })
-                }
-
-                override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                    OalLog.d(TAG, "mDNS service lost: ${serviceInfo.serviceName}")
-                    nsdFoundHost = null
-                    nsdFoundPort = 0
-                }
-
-                override fun onDiscoveryStopped(serviceType: String) {
-                    OalLog.d(TAG, "mDNS discovery stopped")
-                }
-
-                override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                    OalLog.w(TAG, "mDNS discovery start failed: error $errorCode")
-                }
-
-                override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                    OalLog.w(TAG, "mDNS discovery stop failed: error $errorCode")
-                }
-            }
-            nsdManager?.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
-        } catch (e: Exception) {
-            OalLog.w(TAG, "mDNS discovery init failed: ${e.message}")
-        }
-    }
-
-    private fun stopNsdDiscovery() {
-        try {
-            discoveryListener?.let { nsdManager?.stopServiceDiscovery(it) }
-        } catch (_: Exception) {}
-        discoveryListener = null
     }
 
     fun stop() {
@@ -331,52 +151,5 @@ class TcpConnector(
         isRunning = false
         connectJob?.cancel()
         connectJob = null
-        stopNsdDiscovery()
-    }
-
-    private fun getGatewayIp(): String? {
-        try {
-            val wifiManager = context.applicationContext
-                .getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
-            @Suppress("DEPRECATION")
-            val dhcp = wifiManager.dhcpInfo ?: return null
-            val gateway = dhcp.gateway
-            if (gateway == 0) return null
-            return "${gateway and 0xFF}.${(gateway shr 8) and 0xFF}.${(gateway shr 16) and 0xFF}.${(gateway shr 24) and 0xFF}"
-        } catch (e: Exception) {
-            OalLog.e(TAG, "Gateway detection failed: ${e.message}")
-            return null
-        }
-    }
-
-    /**
-     * Tune TCP keepalive timing on a connected [Socket].
-     *
-     * `Socket.setKeepAlive(true)` only enables `SO_KEEPALIVE`; the per-connection
-     * timing constants (`TCP_KEEPIDLE` / `TCP_KEEPINTVL` / `TCP_KEEPCNT`) need
-     * a native `setsockopt` call. Without these the kernel uses its default
-     * 2-hour idle timer which is useless for sub-10s dead-peer detection.
-     *
-     * Uses [ParcelFileDescriptor.fromSocket] (public API) to dup the underlying
-     * FD; socket options set on the dup propagate to the original because both
-     * reference the same kernel socket. No hidden-API reflection.
-     */
-    private fun setKeepAliveParams(socket: Socket, idleSec: Int, intervalSec: Int, count: Int) {
-        // Linux kernel ABI constants — stable across all Android versions.
-        // Not exposed in OsConstants on Android, but the underlying kernel
-        // syscall accepts these directly.
-        val IPPROTO_TCP = 6
-        val TCP_KEEPIDLE = 4
-        val TCP_KEEPINTVL = 5
-        val TCP_KEEPCNT = 6
-        val pfd = android.os.ParcelFileDescriptor.fromSocket(socket)
-        try {
-            val fd = pfd.fileDescriptor
-            android.system.Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPIDLE, idleSec)
-            android.system.Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPINTVL, intervalSec)
-            android.system.Os.setsockoptInt(fd, IPPROTO_TCP, TCP_KEEPCNT, count)
-        } finally {
-            pfd.close()
-        }
     }
 }

@@ -682,34 +682,6 @@ private fun ConnectionTab(viewModel: SettingsViewModel, uiState: SettingsUiState
     }
 }
 
-@Composable
-private fun OverlayButtonToggle(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    testTag: String,
-) {
-    SettingsToggleRow(
-        label = title,
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        controlModifier = Modifier.testTag(testTag),
-    ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-    }
-}
-
 /** Stateless production control: no projection ViewModel or reconnect dependency. */
 @Composable
 internal fun OalInterfaceSizeSetting(percent: Int, onPercentChange: (Int) -> Unit) {
@@ -1510,7 +1482,7 @@ private fun DisplayTab(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Send accelerometer, gyroscope, and compass data to the bridge.",
+                    text = "Send accelerometer, gyroscope, and compass data to Android Auto. Applies on next connection.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1527,7 +1499,7 @@ private fun DisplayTab(
         SectionHeader("OAL controls menu")
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Tap the OAL logo during projection for Settings, phone switching, reconnect and diagnostics. " +
+            text = "Tap the OAL logo during projection for Settings, reconnect and diagnostics. " +
                 "Long-press and drag the logo to move it. Its preferred position returns when screen space is available again.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1544,25 +1516,6 @@ private fun DisplayTab(
         SectionHeader("Android Auto UI")
 
         Spacer(modifier = Modifier.height(8.dp))
-
-        SettingsToggleRow(
-            label = "Sync AA Theme",
-            checked = uiState.syncAaTheme,
-            onCheckedChange = { viewModel.updateSyncAaTheme(it) },
-            controlModifier = Modifier.testTag("syncAaThemeToggle"),
-        ) {
-                Text(
-                    text = "Sync AA Theme",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "Sync Android Auto day/night theme with the car.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-        }
 
         // Hide flags
         Column {
@@ -2279,28 +2232,6 @@ private fun VolumeOffsetSlider(
             valueRange = -100f..100f,
             steps = 19, // 10% increments
             modifier = Modifier.testTag("volumeOffset_$label"),
-        )
-    }
-}
-
-@Composable
-private fun SettingRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
         )
     }
 }

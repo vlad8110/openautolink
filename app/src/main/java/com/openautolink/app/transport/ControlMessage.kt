@@ -227,24 +227,5 @@ enum class ConnectionState {
 }
 
 enum class AudioPurpose {
-    MEDIA, NAVIGATION, ASSISTANT, PHONE_CALL, ALERT;
-
-    fun toWire(): String = when (this) {
-        MEDIA -> "media"
-        NAVIGATION -> "navigation"
-        ASSISTANT -> "assistant"
-        PHONE_CALL -> "phone_call"
-        ALERT -> "alert"
-    }
-
-    companion object {
-        fun fromWire(value: String): AudioPurpose? = when (value) {
-            "media" -> MEDIA
-            "navigation" -> NAVIGATION
-            "assistant" -> ASSISTANT
-            "phone_call" -> PHONE_CALL
-            "alert" -> ALERT
-            else -> null
-        }
-    }
+    MEDIA, NAVIGATION, ASSISTANT, PHONE_CALL, ALERT
 }

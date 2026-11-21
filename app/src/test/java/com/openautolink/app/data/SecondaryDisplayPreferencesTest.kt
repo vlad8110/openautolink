@@ -57,7 +57,7 @@ class SecondaryDisplayPreferencesTest {
             store.edit {
                 it[AppPreferences.DISTANCE_UNITS] = "imperial"
                 it[stringPreferencesKey("cluster_layout_v1_vehicle")] = "{unchanged bytes}"
-                it[AppPreferences.CUSTOM_VIEWPORT_WIDTH] = 1234
+                it[androidx.datastore.preferences.core.intPreferencesKey("custom_viewport_width")] = 1234
             }
             val before = store.data.first().asMap()
             val gm = SecondaryOutputId("qualified-gm")
@@ -294,7 +294,7 @@ class SecondaryDisplayPreferencesTest {
             val layoutScope = ClusterLayoutScope(profile.vehicle, profile.id, profile.role, profile.panel)
             val customLayout = SavedClusterLayout(layoutScope, profile.panel.bounds, profile.output, profile.safe)
             prefs.saveClusterLayout(customLayout)
-            store.edit { it[AppPreferences.CUSTOM_VIEWPORT_WIDTH] = 1234 }
+            store.edit { it[androidx.datastore.preferences.core.intPreferencesKey("custom_viewport_width")] = 1234 }
             val legacy = prefs.getClusterOutputPreferences()
             val baseline = store.data.first().asMap()
             val name = AppPreferences.SECONDARY_DISPLAY_OUTPUTS.name

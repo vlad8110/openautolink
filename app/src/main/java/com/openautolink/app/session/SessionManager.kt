@@ -19,11 +19,7 @@ import com.openautolink.app.data.AppPreferences
 import com.openautolink.app.data.EvLearnedRateEstimator
 import com.openautolink.app.data.EvLearningActivationPolicy
 import com.openautolink.app.data.EvProfilesRepository
-import com.openautolink.app.diagnostics.DiagnosticLevel
 import com.openautolink.app.diagnostics.DiagnosticLog
-import com.openautolink.app.diagnostics.RemoteDiagnostics
-import com.openautolink.app.diagnostics.RemoteDiagnosticsImpl
-import com.openautolink.app.diagnostics.TelemetryCollector
 import com.openautolink.app.input.GnssForwarder
 import com.openautolink.app.input.GnssForwarderImpl
 import com.openautolink.app.input.IgnitionMonitor
@@ -412,7 +408,6 @@ class SessionManager(
             coord.volumeOffsetNavigation = lastVolumeOffsetNavigation
             coord.volumeOffsetAssistant = lastVolumeOffsetAssistant
         }
-        _telemetryCollector?.audioPlayer = _audioPlayer
     }
 
     /** Collectors bound to one AasdkSession, cancelled when it is replaced. */
@@ -750,10 +745,6 @@ class SessionManager(
     private val _vehicleBatteryCapacityWh = MutableStateFlow(0)
     val vehicleBatteryCapacityWh: StateFlow<Int> = _vehicleBatteryCapacityWh.asStateFlow()
 
-    // Diagnostics
-    private var _remoteDiagnostics: RemoteDiagnosticsImpl? = null
-    val remoteDiagnostics: RemoteDiagnostics? get() = _remoteDiagnostics
-    private var _telemetryCollector: TelemetryCollector? = null
 
     val currentManeuver: StateFlow<ManeuverState?>
         get() = _navigationDisplay.currentManeuver
@@ -782,8 +773,7 @@ class SessionManager(
     private val _transportMode = MutableStateFlow("hotspot")
     val transportMode: StateFlow<String> = _transportMode.asStateFlow()
 
-    // Multi-phone default. The currently-connected phone's friendly name is
-    // resolved by ProjectionViewModel from PhoneDiscovery + knownPhonesStore.
+    // Saved default phone name, set at each session start. Not read anywhere today.
     @Volatile private var _defaultPhoneName: String = ""
 
     /**
@@ -791,15 +781,11 @@ class SessionManager(
      * recent session. Cached so that "Save & Reconnect" — which doesn't know
      * the resolved Car Hotspot IP — can keep dialing the same phone instead
      * of dropping to mDNS-only resolution (which times out without an IP).
-     * Cleared by clearDefaultPhone().
      */
     @Volatile private var _lastManualIpAddress: String? = null
 
     /** Set the default phone name from preferences (called at session start). */
     fun setDefaultPhoneName(name: String) { _defaultPhoneName = name }
-
-    /** Get the current default phone name. */
-    fun getDefaultPhoneName(): String = _defaultPhoneName
 
     /** True while an exact WPP session token owns the process-scoped advertiser. */
     fun hasCurrentWppOwner(): Boolean = AaWirelessBtControl.hasCurrentWppOwner()
@@ -861,14 +847,6 @@ class SessionManager(
         return rejection
     }
 
-    /** Clear the default phone — next connection will pick any phone. */
-    fun clearDefaultPhone() {
-        _defaultPhoneName = ""
-        _lastManualIpAddress = null
-        scope.launch {
-            context?.let { AppPreferences.getInstance(it).setDefaultPhoneName("") }
-        }
-    }
 
     /** Switch phone: disconnect, restart discovery in chooser mode. */
     fun switchPhone() {
@@ -1529,9 +1507,9 @@ class SessionManager(
         observeAlwaysInPark()
         ensureVehicleDataForwarder()
 
-        // Create IMU forwarder -- sends via AasdkSession
+        // Create IMU forwarder -- sends via AasdkSession (only when "Send IMU Sensors" is on)
         _imuForwarder?.stop()
-        _imuForwarder = context?.let { ctx ->
+        _imuForwarder = context?.takeIf { AppPreferences.getInstance(it).sendImuSensors.first() }?.let { ctx ->
             ImuForwarder(ctx) { imuData ->
                 val session = aasdkSession ?: return@ImuForwarder
                 imuData.accelXe3?.let { x ->
@@ -1576,15 +1554,6 @@ class SessionManager(
 
         // Cluster intent is snapshotted at the exact admitted protocol-session boundary below.
         // Never start a competing icon-only manager while a map host is retiring.
-
-        // Create diagnostics (local-only)
-        _telemetryCollector?.stop()
-        _remoteDiagnostics = RemoteDiagnosticsImpl()
-        DiagnosticLog.instance = _remoteDiagnostics
-        _telemetryCollector = TelemetryCollector(scope, _remoteDiagnostics!!, _sessionState)
-        _telemetryCollector?.videoDecoder = _videoDecoder
-        _telemetryCollector?.audioPlayer = _audioPlayer
-        _telemetryCollector?.start()
 
         val startupOutcome = kotlinx.coroutines.CompletableDeferred<Unit>()
         val newObserveJob = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
@@ -2350,10 +2319,6 @@ class SessionManager(
         lastMediaMetadata = null
         lastMediaPlaybackState = null
         retireClusterOutput("AA stopped")
-        _telemetryCollector?.stop()
-        _telemetryCollector = null
-        DiagnosticLog.instance = null
-        _remoteDiagnostics = null
         _phoneBatteryLevel.value = null
         _phoneBatteryCritical.value = false
         _voiceSessionActive.value = false
@@ -2585,7 +2550,6 @@ class SessionManager(
             scalingMode,
             seedIdrThresholds = seedIdrThresholds,
         )
-        _telemetryCollector?.videoDecoder = _videoDecoder
 
         // 4. Update audio volume offsets in-place (no release/recreate)
         (_audioPlayer as? AudioPlayerImpl)?.coordinator?.let { coord ->
@@ -3280,7 +3244,6 @@ class SessionManager(
         _videoDecoder?.decoderState?.collect { state ->
             if (state == DecoderState.ERROR) {
                 OalLog.w(TAG, "Decoder error -- initiating recovery")
-                _remoteDiagnostics?.log(DiagnosticLevel.ERROR, "video", "Decoder error -- recovery")
                 _statusMessage.value = "Video error -- recovering..."
                 recoverDecoder()
             }
@@ -3309,8 +3272,6 @@ class SessionManager(
                         OalLog.i(TAG, "Keyframe re-request #$attempt")
                     } else {
                         OalLog.w(TAG, "Keyframe re-request #$attempt (still waiting)")
-                        _remoteDiagnostics?.log(DiagnosticLevel.WARN, "video",
-                            "Keyframe re-request #$attempt")
                     }
                     delay(2000)
                 }
@@ -3456,7 +3417,6 @@ class SessionManager(
             when (message) {
             is ControlMessage.PhoneConnected -> {
                 OalMediaSessionManager.instanceOrNull()?.setAndroidAutoMediaReady(sourceSession,sourceSession.currentNativeSessionGeneration())
-                _remoteDiagnostics?.log(DiagnosticLevel.INFO, "session", "Phone connected: ${message.phoneName}")
                 resetLatchedVehicleSensorState("phone_connected")
                 seedCurrentUiNightMode("phone_connected")
                 val accepted = synchronized(sessionStateLock) {
@@ -3493,7 +3453,6 @@ class SessionManager(
             }
             is ControlMessage.PhoneDisconnected -> {
                 OalMediaSessionManager.instanceOrNull()?.retireAndroidAutoMedia(sourceSession)
-                _remoteDiagnostics?.log(DiagnosticLevel.INFO, "session", "Phone disconnected: ${message.reason}")
                 _gnssForwarder?.stop()
                 detachProcessVehicleSession()
                 _imuForwarder?.stop()
@@ -3573,8 +3532,6 @@ class SessionManager(
                 )
             }
             is ControlMessage.AudioStart -> {
-                _remoteDiagnostics?.log(DiagnosticLevel.INFO, "audio",
-                    "Audio start: purpose=${message.purpose}, rate=${message.sampleRate}")
                 _audioPlayer?.startPurpose(message.purpose, message.sampleRate, message.channels)
             }
             is ControlMessage.AudioStop -> {

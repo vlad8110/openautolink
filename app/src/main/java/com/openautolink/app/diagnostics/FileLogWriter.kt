@@ -18,12 +18,13 @@ import java.util.Locale
  * falling back to the primary external storage (internal shared storage).
  * All files go under an `openautolink/logs/` directory.
  *
- * Each start creates a new file: `oal_2026-04-28_14-30-00.log`
+ * Each start creates a new file: `oal_2026-04-28_14-30-00.log`; hitting
+ * [MAX_FILE_SIZE_BYTES] rolls over to a new file. Only the newest [KEEP_FILES]
+ * `oal_*` and `logcat_*` files are kept.
  * Lines use the format:
  *   `HH:mm:ss.SSS I/tag: message`
  *
  * Thread-safe: all writes go through a synchronized block.
- * Stops writing if the file exceeds [MAX_FILE_SIZE_BYTES] or disk is low.
  */
 class FileLogWriter(private val context: Context) {
 
@@ -33,6 +34,18 @@ class FileLogWriter(private val context: Context) {
         private const val MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024 // 50 MB per file
         private const val MIN_FREE_SPACE_BYTES = 10L * 1024 * 1024 // stop if < 10 MB free
         private const val FLUSH_EVERY_LINES = 64
+        internal const val KEEP_FILES = 10
+
+        /** Delete all but the newest [keep] timestamped `oal_<date>*.log` / `logcat_<date>*.log` in [dir]. */
+        internal fun pruneOldLogs(dir: File, keep: Int = KEEP_FILES) {
+            for (prefix in listOf("oal_", "logcat_")) {
+                // Digit after the prefix: only our timestamped files, never e.g. oal_host_media.log.
+                dir.listFiles { f -> f.isFile && f.name.startsWith(prefix) && f.name.endsWith(".log") &&
+                    f.name.getOrNull(prefix.length)?.isDigit() == true }
+                    .orEmpty().sortedByDescending { it.lastModified() }.drop(keep)
+                    .forEach { runCatching { it.delete() } }
+            }
+        }
     }
 
     @Volatile
@@ -77,15 +90,8 @@ class FileLogWriter(private val context: Context) {
                 return null
             }
 
-            val fileName = "oal_${fileNameFormat.format(Date())}.log"
-            val file = File(dir, fileName)
-
             return try {
-                val fos = FileOutputStream(file, true)
-                writer = BufferedWriter(OutputStreamWriter(fos, Charsets.UTF_8), 8192)
-                bytesWritten = file.length()
-                linesSinceFlush = 0
-                currentFilePath = file.absolutePath
+                val file = openNewFile(dir)
                 isActive = true
                 OalLog.i(TAG, "File logging started: ${file.absolutePath}")
                 file.absolutePath
@@ -94,6 +100,20 @@ class FileLogWriter(private val context: Context) {
                 null
             }
         }
+    }
+
+    /** Must hold [lock]. Opens a fresh oal_*.log in [dir], then prunes old logs. */
+    private fun openNewFile(dir: File): File {
+        val stamp = fileNameFormat.format(Date())
+        var file = File(dir, "oal_$stamp.log")
+        var n = 1
+        while (file.exists()) file = File(dir, "oal_${stamp}_${n++}.log")
+        writer = BufferedWriter(OutputStreamWriter(FileOutputStream(file, true), Charsets.UTF_8), 8192)
+        bytesWritten = 0L
+        linesSinceFlush = 0
+        currentFilePath = file.absolutePath
+        pruneOldLogs(dir)
+        return file
     }
 
     /**
@@ -122,11 +142,19 @@ class FileLogWriter(private val context: Context) {
         synchronized(lock) {
             val w = writer ?: return
             try {
-                // Bail when we hit the per-file cap. Tracked locally to avoid
+                // Roll over at the per-file cap. Tracked locally to avoid
                 // a stat() syscall on the hot path.
                 if (bytesWritten >= MAX_FILE_SIZE_BYTES) {
-                    OalLog.w(TAG, "File log reached ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit, stopping")
-                    stop()
+                    w.close()
+                    val dir = currentFilePath?.let { File(it).parentFile }
+                    if (dir == null || !ensureDir(dir)) {
+                        // Out of space: stop rather than fill the disk.
+                        isActive = false
+                        writer = null
+                        return
+                    }
+                    openNewFile(dir)
+                    write(entry)
                     return
                 }
 

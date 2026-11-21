@@ -139,11 +139,8 @@ class AudioPlayerImpl(private val audioManager: AudioManager) : AudioPlayer {
             audioBytesReceived += frame.data.size
             val now = System.currentTimeMillis()
             if (now - lastAudioLogTime >= 2000) {
-                val ringBuf = slot.ringBufferAvailable
-                val ringCap = slot.ringBufferCapacity
-                val fillPct = if (ringCap > 0) (ringBuf * 100 / ringCap) else 0
                 Log.i(TAG, "audio: frames=$audioFrameCount bytes=$audioBytesReceived " +
-                        "thisFrame=${frame.data.size}B ring=$ringBuf/$ringCap (${fillPct}%) " +
+                        "thisFrame=${frame.data.size}B " +
                         "written=${slot.framesWritten.get()} pending=${slot.pendingAudioBytes} " +
                         "staleDropped=${slot.staleAudioBytesDropped} underruns=${slot.underrunCount.get()}")
                 // Detailed per-slot diagnostics for remote viewing
@@ -158,11 +155,7 @@ class AudioPlayerImpl(private val audioManager: AudioManager) : AudioPlayer {
                 lastAudioLogTime = now
             }
 
-            if (frame.isAac) {
-                slot.feedAac(frame.data)
-            } else {
-                slot.feedPcm(frame.data)
-            }
+            slot.feedPcm(frame.data)
         }
     }
 

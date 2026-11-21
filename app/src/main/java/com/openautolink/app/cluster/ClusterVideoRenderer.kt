@@ -203,7 +203,8 @@ class ClusterVideoRenderer internal constructor(private val factory: ClusterRend
     private fun run() {
         while (true) {
             val command = synchronized(lock) {
-                if (!retiring && queue.isEmpty()) lock.wait(POLL_MS)
+                // Nothing to poll until configured; enqueue() notifies, so idle waits can be long.
+                if (!retiring && queue.isEmpty()) lock.wait(if (configured && !faulted) POLL_MS else IDLE_POLL_MS)
                 if (retiring) null else queue.pollFirst().also {
                     if (it is Command.Frame) { queuedFrames--; queuedBytes -= it.value.bytes.size }
                 }
@@ -394,5 +395,6 @@ class ClusterVideoRenderer internal constructor(private val factory: ClusterRend
         const val MAX_QUEUED_BYTES = 4 * 1024 * 1024
         const val MAX_COMMANDS = 32
         private const val POLL_MS = 5L
+        private const val IDLE_POLL_MS = 100L
     }
 }

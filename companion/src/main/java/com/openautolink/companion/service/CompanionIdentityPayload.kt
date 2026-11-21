@@ -8,10 +8,11 @@ internal object CompanionIdentityPayload {
         bluetoothName: String?,
         proxyPort: Int,
     ): String {
-        require(proxyPort in 1..65535) { "proxyPort must be live" }
+        // No live proxy: omit wpp= so the car treats the reply as "no WPP endpoint".
+        val wppField = if (proxyPort in 1..65535) "\twpp=$proxyPort" else ""
         val bluetoothField = "\tbt_name=${wireValue(bluetoothName.orEmpty())}"
         return "OAL!${wireValue(phoneId)}\t${wireValue(friendlyName)}" +
-            "\twpp=$proxyPort$bluetoothField\n"
+            "$wppField$bluetoothField\n"
     }
 
     private fun wireValue(value: String): String = value

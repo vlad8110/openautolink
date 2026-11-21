@@ -17,7 +17,7 @@ Two components:
 1. **App** (`app/`) — Kotlin/Compose AAOS app. Embeds aasdk C++ via JNI for AA protocol. Renders video/audio, forwards touch/GNSS/vehicle data
 2. **Companion** (`companion/`) — Phone-side app. Opens a TCP listener on port 5277 over the shared WiFi (Car Hotspot or Phone Hotspot) and pipes the AA session to the car app
 
-> **Historical**: Bridge mode (SBC hardware) is preserved on the `bridge-mode` branch. Bridge code in `bridge/` is reference only on this branch.
+> **Historical**: Bridge mode (SBC hardware) is preserved on the `bridge-mode` branch. The `bridge/` folder has been removed from this fork.
 
 ## Performance Priorities
 
@@ -114,8 +114,6 @@ These produce prebuilt `.a` files in `app/src/main/cpp/third_party/`. Gradle's N
 
 ### Bridge (WSL cross-compile + deploy) — bridge-mode branch only
 ```powershell
-scripts\deploy-bridge.ps1          # Build in WSL + deploy to SBC
-scripts\deploy-bridge.ps1 -Clean    # Clean rebuild + deploy
 ```
 See [bridge/sbc/BUILD.md](bridge/sbc/BUILD.md) for SBC setup. CI builds via `.github/workflows/release-bridge.yml`.
 
@@ -164,15 +162,11 @@ See [bridge/sbc/BUILD.md](bridge/sbc/BUILD.md) for SBC setup. CI builds via `.gi
 | [docs/architecture.md](docs/architecture.md) | Component island architecture, milestone plan |
 | [docs/protocol.md](docs/protocol.md) | OAL wire protocol specification (bridge-mode only) |
 | [docs/embedded-knowledge.md](docs/embedded-knowledge.md) | Hardware lessons (MUST READ before touching video/audio/VHAL) |
-| [docs/networking.md](docs/networking.md) | Three-network architecture (bridge-mode only) |
 | [bridge/sbc/BUILD.md](bridge/sbc/BUILD.md) | SBC build and deployment guide (bridge-mode only) |
-| [docs/bridge-update.md](docs/bridge-update.md) | Bridge OTA update system — as-built design, flow, security |
-| [docs/testing.md](docs/testing.md) | Local testing with AAOS emulator + SBC + remote diagnostics |
 ## Pitfalls
 
-- **CRLF**: Shell scripts must be LF (enforced via `.gitattributes eol=lf`). Windows `scp` from PowerShell injects CRLF. **`sed`, `tr`, and `perl` over SSH from PowerShell cannot fix this** — PowerShell re-injects `\r` into escape sequences. Use the Python binary-I/O method in [bridge/sbc/BUILD.md](bridge/sbc/BUILD.md#manually-copying-files-from-windows). The `deploy-bridge.ps1` script handles this automatically.
 - **aasdk v1.6**: Phone requires v1.6 ServiceConfiguration format. v1.1 format = silent ignore
 - **BlueZ SAP plugin** (bridge-mode only): Steals RFCOMM channel 8. Disable with `--noplugin=sap`
 - **MediaCodec lifecycle**: Must release codec on pause, recreate on resume. Surface changes require full codec reset
 - **AudioTrack purpose routing**: See [docs/embedded-knowledge.md](docs/embedded-knowledge.md) — the 5-slot decode_type/audioType matching is non-obvious
-- **No ADB on GM cars**: GM locks ADB on production head units. Use the app's built-in Remote Log Server (TCP port 6555) for live log streaming from a laptop on the same network. See [docs/testing.md](docs/testing.md#10-remote-diagnostics-no-adb-required)
+- **No ADB on GM cars**: GM locks ADB on production head units. Use the app's built-in Remote Log Server (TCP port 6555) for live log streaming from a laptop on the same network. See [docs/live-diagnostics.md](docs/live-diagnostics.md)

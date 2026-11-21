@@ -29,7 +29,6 @@ object RegressionCases {
    override fun onConnecting() {hook.get()("connecting");status.set("connecting")}
    override fun onProxyConnected() {hook.get()("connected");status.set("connected")}
    override fun onProxyDisconnected() {hook.get()("disconnected");status.set("disconnected")}
-   override fun onLaunchTimeout() {}
   })
   val car=Socket(); lateinit var p:AaProxy
   init {set(a,"scope",CoroutineScope(clock+root));set(a,"isRunning",true);call(a,"handleCarConnection",car);clock.run();p=field(a,"activeProxy") as AaProxy}

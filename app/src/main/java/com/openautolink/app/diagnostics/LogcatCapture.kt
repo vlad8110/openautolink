@@ -25,6 +25,7 @@ class LogcatCapture {
 
     companion object {
         private const val TAG = "LogcatCapture"
+        private const val MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024 // stop writing at 50 MB
     }
 
     @Volatile
@@ -93,10 +94,14 @@ class LogcatCapture {
                     writer.use { w ->
                         reader.use { r ->
                             var line = r.readLine()
+                            var bytes = file.length()
                             while (line != null && isActive) {
-                                w.write(line)
-                                w.newLine()
-                                w.flush()
+                                if (bytes < MAX_FILE_SIZE_BYTES) {
+                                    w.write(line)
+                                    w.newLine()
+                                    w.flush()
+                                    bytes += line.length + 1
+                                }
                                 // Tee only the already-owned live --pid stream. Do not start a
                                 // second logcat, drain historical dumps, or acquire permissions.
                                 runCatching { com.openautolink.app.diagnostics.live.LiveLogSink.logcat(line!!) }

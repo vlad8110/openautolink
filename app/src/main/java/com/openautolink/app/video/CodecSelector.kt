@@ -67,29 +67,6 @@ object CodecSelector {
     }
 
     /**
-     * Find any decoder (HW preferred, SW fallback) for the given MIME type.
-     * Returns the codec name.
-     */
-    fun findDecoder(mimeType: String): String? {
-        // Try HW first
-        findHwDecoder(mimeType)?.let { return it }
-
-        // Fall back to any decoder
-        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
-        for (info in codecList.codecInfos) {
-            if (info.isEncoder) continue
-            val types = info.supportedTypes
-            if (types.any { it.equals(mimeType, ignoreCase = true) }) {
-                Log.i(TAG, "Falling back to SW decoder: ${info.name} for $mimeType")
-                return info.name
-            }
-        }
-
-        Log.e(TAG, "No decoder at all for $mimeType")
-        return null
-    }
-
-    /**
      * Returns an ordered list of decoder candidates for the given MIME type,
      * HW (C2 preferred) first, then SW fallbacks. Used to drive a retry
      * loop in MediaCodecDecoder so a flaky HW decoder falls back to SW

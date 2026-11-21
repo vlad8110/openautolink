@@ -63,7 +63,7 @@ Do this while parked, near the car, with current car and companion releases inst
 5. Wait for the phone to show **Sent … to … selected car Bluetooth device(s).** Then check that **Network name (SSID)** and **Access point BSSID** in the car settings match the selected row. The listener stops after applying the transfer; this does not mean projection has started.
 6. **Car:** enter or verify **Password** separately, and verify **WPP network interface**. On GM EVs the normal AP interface is `ap_br_swlan0`; use the interface actually serving your car hotspot. Leave **Hotspot frequency in MHz** blank unless the channel troubleshooting above applies. Tap **Save changes** to store the completed WPP settings; wireless reconnects automatically. Continue with companion setup below.
 
-**What this does not change:** the Wi-Fi password, WPP network interface and optional frequency are not transferred. It does not configure the companion's legacy **Car WiFi** auto-join list; leave that list empty on Android Auto 17.4+ so Android Auto owns Wi-Fi association. You do not need to repeat the transfer on every drive—use it for initial setup or if the hotspot's SSID/BSSID changes.
+**What this does not change:** the Wi-Fi password, WPP network interface and optional frequency are not transferred. You do not need to repeat the transfer on every drive—use it for initial setup or if the hotspot's SSID/BSSID changes.
 
 **If the helper does not work:**
 
@@ -77,12 +77,10 @@ Manual SSID/BSSID entry remains available if the Bluetooth transfer cannot compl
 ### 4. Configure the companion
 
 1. Open the companion.
-2. Under **Auto-Start**, keep **Bluetooth + WiFi Scan (recommended)**.
+2. Under **Auto-Start**, choose **Bluetooth (recommended)**.
 3. Tap **Select Devices** and select the vehicle's Bluetooth device.
-4. On Android Auto 17.4+, remove any entries under the companion's legacy **Car WiFi** section. Android Auto now owns the Wi-Fi association; the companion must not compete for it.
+4. Android Auto 17.4+ owns the Wi-Fi association itself; the companion no longer joins the car Wi-Fi.
 5. Allow the companion to run in the background without battery optimization stopping it.
-
-The companion's legacy **Car WiFi Setup Guide** describes the Android Auto 17.3-and-older flow. Do not use that flow for WPP on 17.4+.
 
 ### 5. Re-pair Bluetooth
 

@@ -35,8 +35,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Foreground service that manages the TCP advertising lifecycle.
- * Listens on port 5277 for the car app over the shared WiFi (Car Hotspot
- * or Phone Hotspot), registers an mDNS service for discovery, and bridges
+ * Listens on port 5277 for the car app over the shared WiFi, registers an
+ * mDNS service for discovery, and bridges
  * incoming connections through AaProxy to the local Android Auto service.
  */
 class CompanionService : Service(), TcpAdvertiser.StateListener {
@@ -44,10 +44,7 @@ class CompanionService : Service(), TcpAdvertiser.StateListener {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private var tcpAdvertiser: TcpAdvertiser? = null
-    private var carWifiManager: com.openautolink.companion.wifi.CarWifiManager? = null
-    private var carNetworkBindingJob: kotlinx.coroutines.Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
     private var fileLogger: CompanionFileLogger? = null
     private var fileLogIdleTimeoutJob: kotlinx.coroutines.Job? = null
     private var wppNetworkObserver: WppNetworkObserver? = null
@@ -62,17 +59,6 @@ class CompanionService : Service(), TcpAdvertiser.StateListener {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Starting..."))
         PhoneWppDiagnostics.setAttemptFinishedListener(::stopWppNetworkObserver)
-        // Hold multicast lock for mDNS discovery (some OEMs filter multicast when screen off)
-        try {
-            val wm = applicationContext.getSystemService(WIFI_SERVICE) as? android.net.wifi.WifiManager
-            multicastLock = wm?.createMulticastLock("OalCompanion")?.apply {
-                setReferenceCounted(false)
-                acquire()
-            }
-            CompanionLog.d(TAG, "MulticastLock acquired")
-        } catch (e: Exception) {
-            CompanionLog.w(TAG, "MulticastLock failed: ${e.message}")
-        }
         // "Always log" mode: if the maintainer persisted logging on, start it as
         // soon as the service exists — independent of any connection. Resumes on
         // every service start (app open, BT/WiFi auto-start, OS sticky-restart);
@@ -115,12 +101,12 @@ class CompanionService : Service(), TcpAdvertiser.StateListener {
             ACTION_START -> {
                 joinWppAttempt(WppIntegrationTrigger.START, intent)
                 setTransportDesired(true)
-                // If already connected (AA bridge active), ignore duplicate starts
+                // If already advertising or connected, ignore duplicate starts
                 // (e.g. BT auto-start firing a few hundred ms after the car already
                 // TCP-connected and we fired the AA trigger). Restarting here would
-                // tear down the proxy mid-connection.
-                if (_isConnected.value) {
-                    CompanionLog.i(TAG, "Start requested but already connected — ignoring")
+                // tear down listeners, the warm proxy and any accepted car socket.
+                if (_isConnected.value || tcpAdvertiser != null) {
+                    CompanionLog.i(TAG, "Start requested but already running — ignoring")
                     return START_STICKY
                 }
                 CompanionLog.i(TAG, "Start requested")
@@ -242,43 +228,7 @@ class CompanionService : Service(), TcpAdvertiser.StateListener {
         tcpAdvertiser = TcpAdvertiser(this, this)
         tcpAdvertiser?.start()
         updateNotification("TCP: waiting for car on port ${TcpAdvertiser.PORT}...")
-        startCarWifiIfConfigured()
-    }
-
-    /**
-     * Start [CarWifiManager] if car WiFi entries are configured.
-     * Runs in parallel with TcpAdvertiser — purely additive, ensures the
-     * phone joins the car's WiFi even when already connected to another network.
-     */
-    private fun startCarWifiIfConfigured() {
-        carNetworkBindingJob?.cancel()
-        carNetworkBindingJob = null
-        carWifiManager?.stop()
-        val prefs = getSharedPreferences(CompanionPrefs.NAME, MODE_PRIVATE)
-        val entries = com.openautolink.companion.wifi.CarWifiEntry.loadAll(prefs)
-        if (entries.isEmpty()) {
-            tcpAdvertiser?.updateCarNetwork(null)
-            PhoneWppDiagnostics.associationOwner(WppAssociationOwner.WPP)
-            CompanionLog.d(TAG, "No car WiFi entries configured, skipping CarWifiManager")
-            return
-        }
-        val mgr = com.openautolink.companion.wifi.CarWifiManager(this)
-        carWifiManager = mgr
-        carNetworkBindingJob = serviceScope.launch {
-            mgr.carNetwork.collect { network ->
-                tcpAdvertiser?.updateCarNetwork(network)
-            }
-        }
-        mgr.start(entries)
-    }
-
-    /**
-     * Restart [CarWifiManager] with current prefs. Called when the user
-     * adds/changes car WiFi entries while the service is already running.
-     */
-    fun restartCarWifi() {
-        CompanionLog.i(TAG, "Restarting CarWifiManager (entries changed)")
-        startCarWifiIfConfigured()
+        PhoneWppDiagnostics.associationOwner(WppAssociationOwner.WPP)
     }
 
     // ── TcpAdvertiser.StateListener ────────────────────────────────────
@@ -307,13 +257,10 @@ class CompanionService : Service(), TcpAdvertiser.StateListener {
         _statusText.value = "Disconnected"
         CompanionLog.i(TAG, "AA proxy disconnected")
         updateNotification("Disconnected — tap Start to retry")
+        // No CPU lock while idle; onProxyConnected re-acquires for the next session.
+        releaseWakeLock()
         // Auto-reconnect disabled during development to avoid interfering
         // with the phone's AA session lifecycle.
-    }
-
-    override fun onLaunchTimeout() {
-        CompanionLog.i(TAG, "Launch timeout — waiting for AA to connect to proxy")
-        // Don't restart — the proxy is still listening, AA may connect late.
     }
 
     // ── Wake lock ──────────────────────────────────────────────────────
@@ -410,15 +357,8 @@ class CompanionService : Service(), TcpAdvertiser.StateListener {
         PhoneWppDiagnostics.timeout()
         PhoneWppDiagnostics.setAttemptFinishedListener(null)
         stopWppNetworkObserver()
-        carNetworkBindingJob?.cancel()
-        carNetworkBindingJob = null
-        carWifiManager?.stop()
         stopFileLogging()
         releaseWakeLock()
-        if (multicastLock?.isHeld == true) {
-            multicastLock?.release()
-            CompanionLog.d(TAG, "MulticastLock released")
-        }
         runtimeHealthMonitor?.stop()
         runtimeHealthMonitor = null
         serviceScope.cancel()

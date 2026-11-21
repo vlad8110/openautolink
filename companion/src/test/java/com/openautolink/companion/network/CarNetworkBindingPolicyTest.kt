@@ -9,19 +9,7 @@ import org.junit.Test
 class CarNetworkBindingPolicyTest {
 
     @Test
-    fun `explicit companion network wins even when it advertises internet`() {
-        val selector = CarNetworkSelector<String>()
-        selector.observe("home", hasInternet = true, hasUsableIpv4 = true, correlatedWithWpp = false)
-        selector.observe("wpp-local", hasInternet = false, hasUsableIpv4 = true, correlatedWithWpp = true)
-        selector.observe("configured-car", hasInternet = true, hasUsableIpv4 = true, correlatedWithWpp = false)
-
-        selector.prefer("configured-car")
-
-        assertEquals("configured-car", selector.selectedNetwork)
-    }
-
-    @Test
-    fun `wpp correlated local only wifi is selected without configured car entries`() {
+    fun `wpp correlated local only wifi is selected`() {
         val selector = CarNetworkSelector<String>()
         selector.observe("home", hasInternet = true, hasUsableIpv4 = true, correlatedWithWpp = false)
         selector.observe("wpp-local", hasInternet = false, hasUsableIpv4 = true, correlatedWithWpp = true)
@@ -70,18 +58,6 @@ class CarNetworkBindingPolicyTest {
         selector.lost("first")
 
         assertEquals("second", selector.selectedNetwork)
-    }
-
-    @Test
-    fun `clearing an explicit preference falls back to local only discovery`() {
-        val selector = CarNetworkSelector<String>()
-        selector.observe("wpp-local", hasInternet = false, hasUsableIpv4 = true, correlatedWithWpp = true)
-        selector.observe("configured-car", hasInternet = true, hasUsableIpv4 = true, correlatedWithWpp = false)
-        selector.prefer("configured-car")
-
-        selector.prefer(null)
-
-        assertEquals("wpp-local", selector.selectedNetwork)
     }
 
     @Test
