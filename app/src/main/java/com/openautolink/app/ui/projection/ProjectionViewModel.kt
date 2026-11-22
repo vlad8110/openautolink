@@ -113,6 +113,8 @@ class ProjectionViewModel(application: Application) : AndroidViewModel(applicati
     @Volatile private var dongleCarPlayRuntime: com.openautolink.app.carplay.DongleCarPlayRuntime? = null
     @Volatile private var carlinkitAdapter: com.openautolink.app.carplay.CarlinkitAdapter? = null
     @Volatile private var carlinkitOwnsScreen = false
+    // One at a time, in arrival order: a quick connect/leave must not be handled as leave/connect.
+    private val carlinkitEvents = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(1)
     private var unifiedUsbManager: com.openautolink.app.transport.usb.UsbConnectionManager? = null
     private val usbConsent = com.openautolink.app.carplay.UsbHotPlugConsent()
     private val usbHandoff = com.openautolink.app.carplay.UsbProjectionHandoff { stage ->
@@ -193,7 +195,7 @@ class ProjectionViewModel(application: Application) : AndroidViewModel(applicati
         carlinkitAdapter?.close()
         lateinit var adapter: com.openautolink.app.carplay.CarlinkitAdapter
         adapter = com.openautolink.app.carplay.CarlinkitAdapter(getApplication(), device) { connected ->
-            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            viewModelScope.launch(carlinkitEvents) {
                 if (connected) {
                     if (com.openautolink.app.input.IgnitionMonitor.isOffOrLocked() || _carPlayState.value.selected) return@launch
                     if (carPlayCoordinator.connectWithContext(true) { attemptContext, report ->
